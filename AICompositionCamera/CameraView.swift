@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct CameraView: View {
     @StateObject private var settings = SettingsStore()
@@ -8,6 +9,8 @@ struct CameraView: View {
     @State private var lastAutomaticAnalysis = Date.distantPast
     @State private var lastAutomaticSceneSignature = ""
     @State private var automaticRequestDates: [Date] = []
+    @State private var feedbackMessage: String?
+    @State private var feedbackTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -20,6 +23,7 @@ struct CameraView: View {
             VStack {
                 topBar
                 Spacer()
+                feedbackToast
                 advicePanel
                 filterStrip
                 controls
@@ -54,6 +58,7 @@ struct CameraView: View {
             statusPill
             Spacer()
             Button {
+                buttonFeedback("打开设置")
                 showingSettings = true
             } label: {
                 Image(systemName: "gearshape.fill")
@@ -62,6 +67,20 @@ struct CameraView: View {
                     .frame(width: 44, height: 44)
                     .background(.black.opacity(0.35), in: Circle())
             }
+            .buttonStyle(PressableButtonStyle())
+        }
+    }
+
+    @ViewBuilder
+    private var feedbackToast: some View {
+        if let feedbackMessage {
+            Text(feedbackMessage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(.black.opacity(0.58), in: Capsule())
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
         }
     }
 
@@ -104,13 +123,14 @@ struct CameraView: View {
 
                 if let recommendedFilter = recommendedFilter {
                     Button {
+                        buttonFeedback("已切换到 AI 推荐滤镜")
                         settings.selectedFilterID = recommendedFilter.id
                     } label: {
                         Label("AI 推荐 \(recommendedFilter.title)\(filterReasonSuffix)", systemImage: "camera.filters")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.white)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableButtonStyle())
                 }
             } else if let error = gptAdvisor.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle")
@@ -128,6 +148,7 @@ struct CameraView: View {
             HStack(spacing: 10) {
                 ForEach(PhotoFilter.all) { filter in
                     Button {
+                        buttonFeedback("已选择\(filter.title)")
                         settings.selectedFilterID = filter.id
                     } label: {
                         VStack(spacing: 4) {
@@ -142,7 +163,7 @@ struct CameraView: View {
                         .padding(.vertical, 9)
                         .background(filterBackground(filter), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableButtonStyle())
                 }
             }
             .padding(.horizontal, 2)
@@ -165,10 +186,11 @@ struct CameraView: View {
                 .frame(width: 84, height: 70)
                 .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
-            .disabled(!settings.gptMode.allowsManual || gptAdvisor.isAnalyzing)
             .opacity(settings.gptMode.allowsManual ? 1 : 0.45)
+            .buttonStyle(PressableButtonStyle())
 
             Button {
+                buttonFeedback("正在拍照")
                 camera.capturePhoto()
             } label: {
                 Circle()
@@ -180,27 +202,61 @@ struct CameraView: View {
                             .frame(width: 58, height: 58)
                     }
             }
+            .buttonStyle(PressableButtonStyle(scale: 0.92))
 
-            VStack(spacing: 6) {
-                Image(systemName: settings.gptMode.allowsAutomatic ? "bolt.circle.fill" : "bolt.slash.circle")
-                    .font(.system(size: 24, weight: .bold))
-                Text(settings.gptMode.allowsAutomatic ? "自动 AI" : "手动 AI")
-                    .font(.caption.weight(.semibold))
+            Button {
+                toggleAIMode()
+            } label: {
+                VStack(spacing: 6) {
+                    Image(systemName: settings.gptMode.allowsAutomatic ? "bolt.circle.fill" : "bolt.slash.circle")
+                        .font(.system(size: 24, weight: .bold))
+                    Text(settings.gptMode.allowsAutomatic ? "自动 AI" : "手动 AI")
+                        .font(.caption.weight(.semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(width: 84, height: 70)
+                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
-            .foregroundStyle(.white)
-            .frame(width: 84, height: 70)
-            .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .buttonStyle(PressableButtonStyle())
         }
         .padding(.top, 10)
     }
 
     private func triggerManualGPT() {
+        guard settings.gptMode.allowsManual else {
+            buttonFeedback("请先在设置中开启手动 AI")
+            return
+        }
+        guard !gptAdvisor.isAnalyzing else {
+            buttonFeedback("AI 正在分析中")
+            return
+        }
+        guard !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            buttonFeedback("请先填写 API Key")
+            return
+        }
+        guard camera.latestImage != nil else {
+            buttonFeedback("相机画面准备中")
+            return
+        }
+
+        buttonFeedback("已开始 AI 分析")
         Task {
             await gptAdvisor.analyze(
                 image: camera.latestImage,
                 localResult: camera.compositionResult,
                 settings: settings
             )
+        }
+    }
+
+    private func toggleAIMode() {
+        if settings.gptMode.allowsAutomatic {
+            settings.gptMode = .manual
+            buttonFeedback("已切换为手动 AI")
+        } else {
+            settings.gptMode = .manualAndAutomatic
+            buttonFeedback("已开启自动 AI")
         }
     }
 
@@ -244,5 +300,34 @@ struct CameraView: View {
 
     private func filterBackground(_ filter: PhotoFilter) -> AnyShapeStyle {
         settings.selectedFilterID == filter.id ? AnyShapeStyle(.white.opacity(0.92)) : AnyShapeStyle(.black.opacity(0.35))
+    }
+
+    private func buttonFeedback(_ message: String) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(.easeOut(duration: 0.16)) {
+            feedbackMessage = message
+        }
+
+        feedbackTask?.cancel()
+        feedbackTask = Task {
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeIn(duration: 0.18)) {
+                    feedbackMessage = nil
+                }
+            }
+        }
+    }
+}
+
+private struct PressableButtonStyle: ButtonStyle {
+    var scale: CGFloat = 0.96
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .opacity(configuration.isPressed ? 0.72 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

@@ -3,17 +3,7 @@ import CoreGraphics
 final class CompositionEngine {
     func evaluate(observations: VisionObservations) -> CompositionResult {
         let subject = primarySubject(from: observations)
-        var rules: [CompositionRuleResult] = [
-            CompositionRuleResult(
-                id: "thirds-grid",
-                category: .general,
-                score: 1,
-                confidence: 1,
-                priority: 0,
-                suggestion: "",
-                overlay: .thirdsGrid
-            )
-        ]
+        var rules: [CompositionRuleResult] = []
 
         if let subject {
             rules.append(contentsOf: generalRules(for: subject))

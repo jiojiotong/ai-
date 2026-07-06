@@ -27,6 +27,8 @@ final class CameraSessionController: NSObject, ObservableObject {
     private var activeFilter = PhotoFilter.fallback
     private var lastAnalysisTime = Date.distantPast
     private var lastImageUpdateTime = Date.distantPast
+    private var lastCompositionUpdateTime = Date.distantPast
+    private var lastPublishedResult: CompositionResult?
     private var lastSubjectCenter: CGPoint?
     private var stableFrameCount = 0
     private var isSessionConfigured = false
@@ -149,9 +151,12 @@ final class CameraSessionController: NSObject, ObservableObject {
         let shouldUpdateImage = now.timeIntervalSince(lastImageUpdateTime) >= 1
         let originalImage = shouldUpdateImage ? makeUIImage(from: pixelBuffer) : nil
         if shouldUpdateImage { lastImageUpdateTime = now }
+        let displayedResult = compositionResultToPublish(result, now: now)
 
         DispatchQueue.main.async {
-            self.compositionResult = result
+            if let displayedResult {
+                self.compositionResult = displayedResult
+            }
             if let originalImage {
                 self.latestImage = originalImage
             }
@@ -177,6 +182,16 @@ final class CameraSessionController: NSObject, ObservableObject {
 
         lastSubjectCenter = subjectCenter
         return stableFrameCount >= 8
+    }
+
+    private func compositionResultToPublish(_ result: CompositionResult, now: Date) -> CompositionResult? {
+        let shouldPublish = now.timeIntervalSince(lastCompositionUpdateTime) >= 0.35
+
+        guard shouldPublish || lastPublishedResult == nil else { return nil }
+
+        lastCompositionUpdateTime = now
+        lastPublishedResult = result
+        return result
     }
 
     private func makeUIImage(from pixelBuffer: CVPixelBuffer) -> UIImage? {
