@@ -94,13 +94,22 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
+          SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -n 's/.*"\(.*\)".*/\1/p' | head -n 1)
+          if [ -z "$SIGNING_IDENTITY" ]; then
+            echo "No code signing identity found in imported certificate. Make sure the .p12 contains the private key."
+            exit 1
+          fi
+
           {
             echo "PROFILE_NAME=$PROFILE_NAME"
             echo "PROFILE_UUID=$PROFILE_UUID"
             echo "TEAM_ID=$TEAM_ID"
             echo "BUNDLE_ID=$BUNDLE_ID"
             echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
+            echo "SIGNING_IDENTITY=$SIGNING_IDENTITY"
           } >> "$GITHUB_ENV"
+
+          echo "Using signing identity: $SIGNING_IDENTITY"
 
       - name: Archive Signed Device App
         run: |
@@ -120,6 +129,7 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGNING_ALLOWED=YES \
             CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
             PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
             OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
             clean archive 2>&1 | tee xcodebuild.log
