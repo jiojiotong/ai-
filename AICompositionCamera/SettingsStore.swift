@@ -24,6 +24,10 @@ final class SettingsStore: ObservableObject {
         didSet { UserDefaults.standard.set(model, forKey: Keys.model) }
     }
 
+    @Published var apiBaseURL: String {
+        didSet { UserDefaults.standard.set(apiBaseURL, forKey: Keys.apiBaseURL) }
+    }
+
     @Published var selectedFilterID: String {
         didSet { UserDefaults.standard.set(selectedFilterID, forKey: Keys.selectedFilterID) }
     }
@@ -35,6 +39,7 @@ final class SettingsStore: ObservableObject {
         overlayIntensity = OverlayIntensity(rawValue: defaults.string(forKey: Keys.overlayIntensity) ?? "normal") ?? .normal
         apiKey = KeychainStore.read(service: Keys.keychainService, account: Keys.apiKey)
         model = defaults.string(forKey: Keys.model) ?? "gpt-4o"
+        apiBaseURL = defaults.string(forKey: Keys.apiBaseURL) ?? "https://api.openai.com/v1"
         selectedFilterID = defaults.string(forKey: Keys.selectedFilterID) ?? PhotoFilter.fallback.id
     }
 }
@@ -87,6 +92,7 @@ private enum Keys {
     static let overlayIntensity = "overlayIntensity"
     static let apiKey = "openAIAPIKey"
     static let model = "openAIModel"
+    static let apiBaseURL = "openAIAPIBaseURL"
     static let selectedFilterID = "selectedFilterID"
     static let keychainService = "AICompositionCamera"
 }

@@ -10,7 +10,6 @@ final class CameraSessionController: NSObject, ObservableObject {
     @Published var authorizationStatus: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
     @Published var compositionResult: CompositionResult?
     @Published var latestImage: UIImage?
-    @Published var previewImage: UIImage?
     @Published var selectedFilter = PhotoFilter.fallback
     @Published var isFrameStable = false
     @Published var statusText = "等待相机权限"
@@ -28,7 +27,6 @@ final class CameraSessionController: NSObject, ObservableObject {
     private var activeFilter = PhotoFilter.fallback
     private var lastAnalysisTime = Date.distantPast
     private var lastImageUpdateTime = Date.distantPast
-    private var lastPreviewImageUpdateTime = Date.distantPast
     private var lastSubjectCenter: CGPoint?
     private var stableFrameCount = 0
     private var isSessionConfigured = false
@@ -130,22 +128,7 @@ final class CameraSessionController: NSObject, ObservableObject {
         let now = Date()
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        let shouldAnalyze = now.timeIntervalSince(lastAnalysisTime) >= 0.08
-        let shouldUpdatePreview = now.timeIntervalSince(lastPreviewImageUpdateTime) >= 1.0 / 24.0
-        guard shouldAnalyze || shouldUpdatePreview else { return }
-
-        let filter = currentFilter()
-        let previewImage = shouldUpdatePreview ? makeFilteredUIImage(from: pixelBuffer, filter: filter) : nil
-        if shouldUpdatePreview { lastPreviewImageUpdateTime = now }
-
-        guard shouldAnalyze else {
-            if let previewImage {
-                DispatchQueue.main.async {
-                    self.previewImage = previewImage
-                }
-            }
-            return
-        }
+        guard now.timeIntervalSince(lastAnalysisTime) >= 0.08 else { return }
 
         lastAnalysisTime = now
 
@@ -172,7 +155,6 @@ final class CameraSessionController: NSObject, ObservableObject {
             if let originalImage {
                 self.latestImage = originalImage
             }
-            self.previewImage = previewImage
             self.isFrameStable = stable
         }
     }
@@ -201,11 +183,6 @@ final class CameraSessionController: NSObject, ObservableObject {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(.right)
         guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return nil }
         return UIImage(cgImage: cgImage)
-    }
-
-    private func makeFilteredUIImage(from pixelBuffer: CVPixelBuffer, filter: PhotoFilter) -> UIImage? {
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(.right)
-        return filterEngine.makeUIImage(from: filterEngine.apply(filter: filter, to: ciImage))
     }
 
     private func currentFilter() -> PhotoFilter {

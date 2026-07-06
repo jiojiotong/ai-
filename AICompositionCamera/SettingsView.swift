@@ -25,6 +25,11 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
+                    TextField("中转站地址，例如 https://api.openai.com/v1", text: $settings.apiBaseURL)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
                     TextField("模型", text: $settings.model)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -47,7 +52,7 @@ struct SettingsView: View {
                 }
 
                 Section("隐私") {
-                    Text("端侧实时构图和滤镜预览不会上传画面。开启 GPT 分析后，应用会把当前取景帧压缩后发送到你配置的 GPT 接口，用于生成构图建议和滤镜推荐。")
+                    Text("端侧实时构图不会上传画面。开启 GPT 分析后，应用会把当前取景帧压缩后发送到你配置的 GPT 接口或中转站，用于生成构图建议和滤镜推荐。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

@@ -29,6 +29,7 @@ final class GPTCompositionAdvisor: ObservableObject {
                 jpegData: jpegData,
                 localContext: localResult?.gptContext ?? "No local context.",
                 apiKey: settings.apiKey,
+                apiBaseURL: settings.apiBaseURL,
                 model: settings.model
             )
             let parsed = parseResponse(response)
@@ -55,8 +56,18 @@ final class GPTCompositionAdvisor: ObservableObject {
         return resized.jpegData(compressionQuality: 0.62)
     }
 
-    private func requestAdvice(jpegData: Data, localContext: String, apiKey: String, model: String) async throws -> String {
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
+    private func requestAdvice(
+        jpegData: Data,
+        localContext: String,
+        apiKey: String,
+        apiBaseURL: String,
+        model: String
+    ) async throws -> String {
+        guard let url = chatCompletionsURL(from: apiBaseURL) else {
+            throw GPTError.invalidBaseURL
+        }
+
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -104,6 +115,22 @@ final class GPTCompositionAdvisor: ObservableObject {
         return content
     }
 
+    private func chatCompletionsURL(from apiBaseURL: String) -> URL? {
+        let trimmed = apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseURLString = trimmed.isEmpty ? "https://api.openai.com/v1" : trimmed
+        guard let baseURL = URL(string: baseURLString), let scheme = baseURL.scheme, !scheme.isEmpty else {
+            return nil
+        }
+
+        if baseURL.path.hasSuffix("/chat/completions") {
+            return baseURL
+        }
+
+        return baseURL
+            .appendingPathComponent("chat")
+            .appendingPathComponent("completions")
+    }
+
     private func parseResponse(_ response: String) -> (advice: String, filterID: String?, filterReason: String?) {
         var advice = response.trimmingCharacters(in: .whitespacesAndNewlines)
         var filterID: String?
@@ -142,11 +169,13 @@ private struct OpenAIChatResponse: Decodable {
 private enum GPTError: LocalizedError {
     case badResponse
     case emptyResponse
+    case invalidBaseURL
 
     var errorDescription: String? {
         switch self {
         case .badResponse: return "接口返回异常"
         case .emptyResponse: return "没有收到建议"
+        case .invalidBaseURL: return "中转站地址格式不正确"
         }
     }
 }

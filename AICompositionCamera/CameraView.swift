@@ -11,7 +11,7 @@ struct CameraView: View {
 
     var body: some View {
         ZStack {
-            FilteredCameraPreviewView(image: camera.previewImage)
+            CameraPreviewView(session: camera.session)
                 .ignoresSafeArea()
 
             OverlayView(result: camera.compositionResult, intensity: settings.overlayIntensity)
