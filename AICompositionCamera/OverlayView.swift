@@ -66,7 +66,7 @@ struct OverlayView: View {
 
     private func box(_ rect: CGRect, color: Color, in displayRect: CGRect) -> some View {
         let mapped = map(rect, into: displayRect)
-        RoundedRectangle(cornerRadius: 10)
+        return RoundedRectangle(cornerRadius: 10)
             .stroke(color.opacity(0.85), lineWidth: 2)
             .frame(width: mapped.width, height: mapped.height)
             .position(x: mapped.midX, y: mapped.midY)
