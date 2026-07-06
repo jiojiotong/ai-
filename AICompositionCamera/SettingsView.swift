@@ -38,8 +38,16 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("滤镜") {
+                    Picker("默认滤镜", selection: $settings.selectedFilterID) {
+                        ForEach(PhotoFilter.all) { filter in
+                            Text(filter.title).tag(filter.id)
+                        }
+                    }
+                }
+
                 Section("隐私") {
-                    Text("端侧实时构图不会上传画面。开启 GPT 分析后，应用会把当前取景帧压缩后发送到你配置的 GPT 接口，用于生成构图建议。")
+                    Text("端侧实时构图和滤镜预览不会上传画面。开启 GPT 分析后，应用会把当前取景帧压缩后发送到你配置的 GPT 接口，用于生成构图建议和滤镜推荐。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

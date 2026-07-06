@@ -18,6 +18,10 @@
 		A10000000000000000000009 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* SettingsStore.swift */; };
 		A1000000000000000000000A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* SettingsView.swift */; };
 		A1000000000000000000000B /* GPTCompositionAdvisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* GPTCompositionAdvisor.swift */; };
+		A1000000000000000000000C /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* KeychainStore.swift */; };
+		A1000000000000000000000D /* PhotoFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* PhotoFilter.swift */; };
+		A1000000000000000000000E /* FilterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* FilterEngine.swift */; };
+		A1000000000000000000000F /* FilteredCameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* FilteredCameraPreviewView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +38,10 @@
 		A2000000000000000000000B /* GPTCompositionAdvisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPTCompositionAdvisor.swift; sourceTree = "<group>"; };
 		A2000000000000000000000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A2000000000000000000000D /* AICompositionCamera.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AICompositionCamera.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A2000000000000000000000E /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		A2000000000000000000000F /* PhotoFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoFilter.swift; sourceTree = "<group>"; };
+		A20000000000000000000010 /* FilterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 /* FilteredCameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilteredCameraPreviewView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -69,6 +77,10 @@
 				A20000000000000000000009 /* SettingsStore.swift */,
 				A2000000000000000000000A /* SettingsView.swift */,
 				A2000000000000000000000B /* GPTCompositionAdvisor.swift */,
+				A2000000000000000000000E /* KeychainStore.swift */,
+				A2000000000000000000000F /* PhotoFilter.swift */,
+				A20000000000000000000010 /* FilterEngine.swift */,
+				A20000000000000000000011 /* FilteredCameraPreviewView.swift */,
 				A2000000000000000000000C /* Info.plist */,
 			);
 			path = AICompositionCamera;
@@ -161,6 +173,10 @@
 				A10000000000000000000009 /* SettingsStore.swift in Sources */,
 				A1000000000000000000000A /* SettingsView.swift in Sources */,
 				A1000000000000000000000B /* GPTCompositionAdvisor.swift in Sources */,
+				A1000000000000000000000C /* KeychainStore.swift in Sources */,
+				A1000000000000000000000D /* PhotoFilter.swift in Sources */,
+				A1000000000000000000000E /* FilterEngine.swift in Sources */,
+				A1000000000000000000000F /* FilteredCameraPreviewView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -4,10 +4,13 @@ set -euo pipefail
 if [ "$#" -lt 1 ]; then
   cat >&2 <<'EOF'
 Usage:
-  scripts/set-github-ios-secrets.sh OWNER/REPO [P12_PASSWORD]
+  scripts/set-github-ios-secrets.sh OWNER/REPO
 
 Example:
-  scripts/set-github-ios-secrets.sh your-name/your-repo 1
+  scripts/set-github-ios-secrets.sh your-name/your-repo
+
+Optional:
+  IOS_CERTIFICATE_PASSWORD=... scripts/set-github-ios-secrets.sh your-name/your-repo
 
 Required files:
   /Volumes/其他/Workspace/证书/证书文件(2).p12
@@ -17,7 +20,7 @@ EOF
 fi
 
 REPO="$1"
-P12_PASSWORD="${2:-${IOS_CERTIFICATE_PASSWORD:-}}"
+P12_PASSWORD="${IOS_CERTIFICATE_PASSWORD:-}"
 
 if [ -z "$P12_PASSWORD" ]; then
   read -r -s -p "P12 password: " P12_PASSWORD

@@ -33,7 +33,11 @@ final class CompositionEngine {
             rules.append(contentsOf: portraitRules(face: face))
         }
 
-        return CompositionResult(rules: rules, primarySubject: subject)
+        return CompositionResult(
+            rules: rules,
+            primarySubject: subject,
+            imageAspectRatio: observations.displayAspectRatio
+        )
     }
 
     private func primarySubject(from observations: VisionObservations) -> CompositionSubject? {

@@ -61,13 +61,19 @@ Settings -> Secrets and variables -> Actions -> New repository secret
 也可以使用项目里的脚本自动设置，避免把 base64 内容打印到终端：
 
 ```bash
-scripts/set-github-ios-secrets.sh OWNER/REPO 1
+scripts/set-github-ios-secrets.sh OWNER/REPO
 ```
 
 其中 `OWNER/REPO` 替换成你的 GitHub 仓库，例如：
 
 ```bash
-scripts/set-github-ios-secrets.sh jiojiotong/ai-camera 1
+scripts/set-github-ios-secrets.sh jiojiotong/ai-camera
+```
+
+脚本会隐藏输入证书密码，避免密码出现在 shell 历史记录中。也可以用环境变量：
+
+```bash
+IOS_CERTIFICATE_PASSWORD=你的密码 scripts/set-github-ios-secrets.sh jiojiotong/ai-camera
 ```
 
 脚本会读取：

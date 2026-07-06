@@ -15,11 +15,17 @@ final class SettingsStore: ObservableObject {
     }
 
     @Published var apiKey: String {
-        didSet { UserDefaults.standard.set(apiKey, forKey: Keys.apiKey) }
+        didSet {
+            KeychainStore.save(apiKey, service: Keys.keychainService, account: Keys.apiKey)
+        }
     }
 
     @Published var model: String {
         didSet { UserDefaults.standard.set(model, forKey: Keys.model) }
+    }
+
+    @Published var selectedFilterID: String {
+        didSet { UserDefaults.standard.set(selectedFilterID, forKey: Keys.selectedFilterID) }
     }
 
     init() {
@@ -27,8 +33,9 @@ final class SettingsStore: ObservableObject {
         gptMode = GPTMode(rawValue: defaults.string(forKey: Keys.gptMode) ?? "manual") ?? .manual
         automaticGPTInterval = defaults.object(forKey: Keys.automaticGPTInterval) as? TimeInterval ?? 10
         overlayIntensity = OverlayIntensity(rawValue: defaults.string(forKey: Keys.overlayIntensity) ?? "normal") ?? .normal
-        apiKey = defaults.string(forKey: Keys.apiKey) ?? ""
+        apiKey = KeychainStore.read(service: Keys.keychainService, account: Keys.apiKey)
         model = defaults.string(forKey: Keys.model) ?? "gpt-4o"
+        selectedFilterID = defaults.string(forKey: Keys.selectedFilterID) ?? PhotoFilter.fallback.id
     }
 }
 
@@ -80,4 +87,6 @@ private enum Keys {
     static let overlayIntensity = "overlayIntensity"
     static let apiKey = "openAIAPIKey"
     static let model = "openAIModel"
+    static let selectedFilterID = "selectedFilterID"
+    static let keychainService = "AICompositionCamera"
 }

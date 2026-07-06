@@ -5,11 +5,18 @@ struct VisionObservations {
     var humans: [CGRect]
     var salientObjects: [CGRect]
     var frameSize: CGSize
+
+    var displayAspectRatio: CGFloat {
+        guard frameSize.width > 0 else { return 9.0 / 16.0 }
+        // Camera buffers are analyzed in portrait via `.right` orientation.
+        return frameSize.height / frameSize.width
+    }
 }
 
 struct CompositionResult {
     var rules: [CompositionRuleResult]
     var primarySubject: CompositionSubject?
+    var imageAspectRatio: CGFloat
 
     var topSuggestion: String? {
         rules
@@ -32,6 +39,15 @@ struct CompositionResult {
             .map { "\($0.category.rawValue): \($0.suggestion) score=\(Int($0.score * 100)) confidence=\(Int($0.confidence * 100))" }
             .joined(separator: "; ")
         return topRules.isEmpty ? "No strong local composition issue detected." : topRules
+    }
+
+    var sceneSignature: String {
+        guard let subject = primarySubject else { return "no-subject" }
+        let x = Int((subject.rect.midX * 10).rounded())
+        let y = Int((subject.rect.midY * 10).rounded())
+        let w = Int((subject.rect.width * 10).rounded())
+        let h = Int((subject.rect.height * 10).rounded())
+        return "\(subject.kind.rawValue)-\(x)-\(y)-\(w)-\(h)-\(topSuggestion ?? "")"
     }
 }
 
