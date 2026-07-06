@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Select Xcode
         run: |
@@ -198,7 +198,7 @@ jobs:
           cp "$IPA_PATH" AICompositionCamera-signed-device.ipa
 
       - name: Upload Signed IPA
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: AICompositionCamera-signed-ipa
           retention-days: 14
@@ -219,7 +219,7 @@ jobs:
 
       - name: Upload Build Log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: AICompositionCamera-ios-build-log
           retention-days: 14
