@@ -76,6 +76,12 @@ struct CameraView: View {
 
             stageAspectRatioGuide
 
+            CaptureGuidanceOverlay(
+                guidance: activeCaptureGuidance,
+                imageAspectRatio: camera.compositionResult?.imageAspectRatio ?? 9.0 / 16.0,
+                currentZoomFactor: camera.zoomFactor
+            )
+
             VStack(spacing: 0) {
                 stageTopOverlay
                 Spacer()
@@ -151,16 +157,29 @@ struct CameraView: View {
 
     private var zoomStrip: some View {
         HStack(spacing: 0) {
-            ForEach([".5x", "1x", "2x", "4x", "8x"], id: \.self) { zoom in
-                Text(zoom)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(zoom == "1x" ? .black : .white)
-                    .frame(width: 54, height: 40)
-                    .background {
-                        if zoom == "1x" {
-                            Circle().fill(.white.opacity(0.94))
-                        }
+            ForEach([CGFloat(0.5), 1, 2, 4, 8], id: \.self) { zoom in
+                let isSelected = abs(camera.zoomFactor - zoom) < 0.08
+                let isSupported = isZoomSupported(zoom)
+
+                Button {
+                    guard isSupported else {
+                        buttonFeedback("当前镜头不支持 \(zoomLabel(zoom))x")
+                        return
                     }
+                    camera.setZoomFactor(zoom)
+                    buttonFeedback("已切换到 \(zoomLabel(zoom))x")
+                } label: {
+                    Text("\(zoomLabel(zoom))x")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(isSelected ? .black : .white.opacity(isSupported ? 1 : 0.38))
+                        .frame(width: 54, height: 40)
+                        .background {
+                            if isSelected {
+                                Circle().fill(.white.opacity(0.94))
+                            }
+                        }
+                }
+                .buttonStyle(PressableButtonStyle(scale: 0.9))
             }
         }
         .padding(.horizontal, 8)
@@ -824,8 +843,19 @@ struct CameraView: View {
         return PhotoFilter.all.first { $0.id == id }
     }
 
+    private var activeCaptureGuidance: CaptureGuidance? {
+        let guidance = gptAdvisor.captureGuidance ?? camera.compositionResult?.liveGuidance
+        return normalizedGuidance(guidance)
+    }
+
     private var stageHintText: String {
         if gptAdvisor.isAnalyzing { return "正在识别取景" }
+        if let guidance = activeCaptureGuidance {
+            if let zoom = guidance.zoomFactor {
+                return "\(guidance.message) \(zoomLabel(zoom))x"
+            }
+            return guidance.message
+        }
         if let advice = gptAdvisor.advice, !advice.isEmpty { return advice }
         if let suggestion = camera.compositionResult?.topSuggestion { return suggestion }
         return "对准主体后按 AI"
@@ -850,6 +880,12 @@ struct CameraView: View {
     private var aiCoachMessage: String {
         if gptAdvisor.isAnalyzing { return "保持手机稳定，正在判断主体、留白和角度。" }
         if let error = gptAdvisor.errorMessage { return error }
+        if let guidance = activeCaptureGuidance {
+            if let zoom = guidance.zoomFactor {
+                return "\(guidance.message)，切到 \(zoomLabel(zoom))x 取景。"
+            }
+            return guidance.message
+        }
         if let advice = gptAdvisor.advice, !advice.isEmpty { return advice }
         if let photoStatus = camera.photoStatusText { return photoStatus }
         return camera.compositionResult?.topSuggestion ?? "对准主体后点击 GPT 识别取景。"
@@ -904,6 +940,49 @@ struct CameraView: View {
 
     private func aspectRatioBackground(_ ratio: ShootingAspectRatio) -> AnyShapeStyle {
         settings.selectedAspectRatio == ratio ? AnyShapeStyle(.white.opacity(0.92)) : AnyShapeStyle(.white.opacity(0.12))
+    }
+
+    private func isZoomSupported(_ zoom: CGFloat) -> Bool {
+        zoom >= camera.minZoomFactor - 0.02 && zoom <= camera.maxZoomFactor + 0.02
+    }
+
+    private func normalizedGuidance(_ guidance: CaptureGuidance?) -> CaptureGuidance? {
+        guard var guidance else { return nil }
+        guard let zoom = guidance.zoomFactor else { return guidance }
+
+        if isZoomSupported(zoom) {
+            return guidance
+        }
+
+        if zoom < camera.minZoomFactor {
+            guidance.zoomFactor = nil
+            if guidance.direction == nil || guidance.direction == .closer {
+                guidance.direction = .farther
+                guidance.message = "后退一点"
+            }
+            return guidance
+        }
+
+        if camera.maxZoomFactor <= 1.05 {
+            guidance.zoomFactor = nil
+            if guidance.direction == nil || guidance.direction == .hold {
+                guidance.direction = .closer
+            }
+            guidance.message = "靠近主体"
+            return guidance
+        }
+
+        guidance.zoomFactor = camera.maxZoomFactor
+        guidance.message = "切到 \(zoomLabel(camera.maxZoomFactor))x"
+        return guidance
+    }
+
+    private func zoomLabel(_ value: CGFloat) -> String {
+        let rounded = (value * 10).rounded() / 10
+        if rounded.rounded() == rounded {
+            return String(Int(rounded))
+        }
+        return String(format: "%.1f", Double(rounded))
     }
 
     private func cycleAspectRatio() {

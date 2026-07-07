@@ -22,6 +22,7 @@
 		A1000000000000000000000D /* PhotoFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* PhotoFilter.swift */; };
 		A1000000000000000000000E /* FilterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* FilterEngine.swift */; };
 		A1000000000000000000000F /* FilteredCameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* FilteredCameraPreviewView.swift */; };
+		A10000000000000000000010 /* CaptureGuidanceOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* CaptureGuidanceOverlay.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +43,7 @@
 		A2000000000000000000000F /* PhotoFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoFilter.swift; sourceTree = "<group>"; };
 		A20000000000000000000010 /* FilterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterEngine.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* FilteredCameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilteredCameraPreviewView.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 /* CaptureGuidanceOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureGuidanceOverlay.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,6 +76,7 @@
 				A20000000000000000000006 /* VisionAnalyzer.swift */,
 				A20000000000000000000007 /* CompositionEngine.swift */,
 				A20000000000000000000008 /* OverlayView.swift */,
+				A20000000000000000000012 /* CaptureGuidanceOverlay.swift */,
 				A20000000000000000000009 /* SettingsStore.swift */,
 				A2000000000000000000000A /* SettingsView.swift */,
 				A2000000000000000000000B /* GPTCompositionAdvisor.swift */,
@@ -177,6 +180,7 @@
 				A1000000000000000000000D /* PhotoFilter.swift in Sources */,
 				A1000000000000000000000E /* FilterEngine.swift in Sources */,
 				A1000000000000000000000F /* FilteredCameraPreviewView.swift in Sources */,
+				A10000000000000000000010 /* CaptureGuidanceOverlay.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

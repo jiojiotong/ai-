@@ -50,6 +50,103 @@ struct CompositionResult {
         let h = Int((subject.rect.height * 10).rounded())
         return "\(subject.kind.rawValue)-\(x)-\(y)-\(w)-\(h)-\(topSuggestion ?? "")"
     }
+
+    var liveGuidance: CaptureGuidance {
+        guard let subject = primarySubject else {
+            return CaptureGuidance(
+                direction: .closer,
+                zoomFactor: 2,
+                message: "靠近主体",
+                targetRect: nil,
+                source: .local,
+                priority: 60
+            )
+        }
+
+        let rect = subject.rect
+        let center = rect.center
+
+        if rect.area < 0.045 {
+            return CaptureGuidance(
+                direction: .closer,
+                zoomFactor: 2,
+                message: "拉到 2x",
+                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: 0.5)),
+                source: .local,
+                priority: 86
+            )
+        }
+
+        if rect.area > 0.62 {
+            return CaptureGuidance(
+                direction: .farther,
+                zoomFactor: nil,
+                message: "后退一点",
+                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: 0.5)),
+                source: .local,
+                priority: 84
+            )
+        }
+
+        if rect.minX < 0.05 || center.x < 0.38 {
+            return CaptureGuidance(
+                direction: .left,
+                zoomFactor: nil,
+                message: "相机左移",
+                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: center.y)),
+                source: .local,
+                priority: 82
+            )
+        }
+
+        if rect.maxX > 0.95 || center.x > 0.62 {
+            return CaptureGuidance(
+                direction: .right,
+                zoomFactor: nil,
+                message: "相机右移",
+                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: center.y)),
+                source: .local,
+                priority: 82
+            )
+        }
+
+        if rect.minY < 0.05 || center.y < 0.34 {
+            return CaptureGuidance(
+                direction: .up,
+                zoomFactor: nil,
+                message: "相机上移",
+                targetRect: targetRect(for: rect, center: CGPoint(x: center.x, y: 0.42)),
+                source: .local,
+                priority: 78
+            )
+        }
+
+        if rect.maxY > 0.96 || center.y > 0.68 {
+            return CaptureGuidance(
+                direction: .down,
+                zoomFactor: nil,
+                message: "相机下移",
+                targetRect: targetRect(for: rect, center: CGPoint(x: center.x, y: 0.58)),
+                source: .local,
+                priority: 78
+            )
+        }
+
+        return CaptureGuidance(
+            direction: .hold,
+            zoomFactor: nil,
+            message: "可以拍",
+            targetRect: rect,
+            source: .local,
+            priority: 20
+        )
+    }
+
+    private func targetRect(for rect: CGRect, center: CGPoint) -> CGRect {
+        let x = min(max(center.x - rect.width / 2, 0.04), max(0.04, 0.96 - rect.width))
+        let y = min(max(center.y - rect.height / 2, 0.04), max(0.04, 0.96 - rect.height))
+        return CGRect(x: x, y: y, width: rect.width, height: rect.height)
+    }
 }
 
 struct CompositionSubject {
@@ -94,8 +191,64 @@ enum ArrowDirection {
     case down
 }
 
+struct CaptureGuidance: Equatable {
+    var direction: CameraMoveDirection?
+    var zoomFactor: CGFloat?
+    var message: String
+    var targetRect: CGRect?
+    var source: GuidanceSource
+    var priority: Int
+
+    var isActionable: Bool {
+        direction != nil || zoomFactor != nil
+    }
+}
+
+enum GuidanceSource: String {
+    case local
+    case ai
+}
+
+enum CameraMoveDirection: String {
+    case left
+    case right
+    case up
+    case down
+    case closer
+    case farther
+    case hold
+
+    var title: String {
+        switch self {
+        case .left: return "相机左移"
+        case .right: return "相机右移"
+        case .up: return "相机上移"
+        case .down: return "相机下移"
+        case .closer: return "靠近"
+        case .farther: return "后退"
+        case .hold: return "可以拍"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .left: return "arrow.left"
+        case .right: return "arrow.right"
+        case .up: return "arrow.up"
+        case .down: return "arrow.down"
+        case .closer: return "plus.magnifyingglass"
+        case .farther: return "minus.magnifyingglass"
+        case .hold: return "checkmark"
+        }
+    }
+}
+
 extension CGRect {
     var center: CGPoint {
         CGPoint(x: midX, y: midY)
+    }
+
+    var area: CGFloat {
+        width * height
     }
 }

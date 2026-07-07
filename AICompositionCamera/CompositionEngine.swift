@@ -246,9 +246,3 @@ final class CompositionEngine {
         candidates.min { abs($0 - value) < abs($1 - value) } ?? value
     }
 }
-
-private extension CGRect {
-    var area: CGFloat {
-        width * height
-    }
-}

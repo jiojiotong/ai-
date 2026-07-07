@@ -15,6 +15,9 @@ final class CameraSessionController: NSObject, ObservableObject {
     @Published var isFrameStable = false
     @Published var statusText = "等待相机权限"
     @Published var photoStatusText: String?
+    @Published var zoomFactor: CGFloat = 1
+    @Published var minZoomFactor: CGFloat = 1
+    @Published var maxZoomFactor: CGFloat = 1
 
     private let sessionQueue = DispatchQueue(label: "camera.session.queue")
     private let videoOutputQueue = DispatchQueue(label: "camera.video.output.queue")
@@ -26,6 +29,7 @@ final class CameraSessionController: NSObject, ObservableObject {
     private let filterLock = NSLock()
     private let captureAspectRatioLock = NSLock()
     private let ciContext = CIContext()
+    private var videoDevice: AVCaptureDevice?
     private var activeFilter = PhotoFilter.fallback
     private var pendingCaptureAspectRatio = ShootingAspectRatio.full
     private var lastAnalysisTime = Date.distantPast
@@ -89,6 +93,32 @@ final class CameraSessionController: NSObject, ObservableObject {
         }
     }
 
+    func setZoomFactor(_ factor: CGFloat) {
+        sessionQueue.async { [weak self] in
+            guard let self, let device = self.videoDevice else { return }
+            let minZoom = device.minAvailableVideoZoomFactor
+            let maxZoom = min(device.maxAvailableVideoZoomFactor, 8)
+            let clamped = min(max(factor, minZoom), maxZoom)
+
+            do {
+                try device.lockForConfiguration()
+                if device.isRampingVideoZoom {
+                    device.cancelVideoZoomRamp()
+                }
+                device.ramp(toVideoZoomFactor: clamped, withRate: 7)
+                device.unlockForConfiguration()
+
+                DispatchQueue.main.async {
+                    self.zoomFactor = clamped
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.photoStatusText = "无法切换变焦：\(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
     private func configureAndStartSession() {
         if session.isRunning { return }
 
@@ -100,13 +130,14 @@ final class CameraSessionController: NSObject, ObservableObject {
                 session.commitConfiguration()
             }
 
-            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+            guard let device = preferredBackCamera(),
                   let input = try? AVCaptureDeviceInput(device: device),
                   session.canAddInput(input) else {
                 DispatchQueue.main.async { self.statusText = "无法打开后置相机" }
                 return
             }
 
+            videoDevice = device
             session.addInput(input)
 
             videoOutput.videoSettings = [
@@ -125,12 +156,37 @@ final class CameraSessionController: NSObject, ObservableObject {
 
             videoOutput.connection(with: .video)?.videoOrientation = .portrait
             photoOutput.connection(with: .video)?.videoOrientation = .portrait
+            publishZoomBounds(for: device)
             isSessionConfigured = true
         }
 
         session.startRunning()
 
         DispatchQueue.main.async { self.statusText = "实时构图分析中" }
+    }
+
+    private func preferredBackCamera() -> AVCaptureDevice? {
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [
+                .builtInTripleCamera,
+                .builtInDualWideCamera,
+                .builtInDualCamera,
+                .builtInWideAngleCamera
+            ],
+            mediaType: .video,
+            position: .back
+        )
+        return discovery.devices.first ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+    }
+
+    private func publishZoomBounds(for device: AVCaptureDevice) {
+        let minZoom = device.minAvailableVideoZoomFactor
+        let maxZoom = min(device.maxAvailableVideoZoomFactor, 8)
+        DispatchQueue.main.async {
+            self.minZoomFactor = minZoom
+            self.maxZoomFactor = maxZoom
+            self.zoomFactor = min(max(device.videoZoomFactor, minZoom), maxZoom)
+        }
     }
 
     private func process(sampleBuffer: CMSampleBuffer) {
