@@ -4,7 +4,7 @@ import UIKit
 struct CameraView: View {
     @StateObject private var settings = SettingsStore()
     @StateObject private var camera = CameraSessionController()
-    @StateObject private var gptAdvisor = GPTCompositionAdvisor()
+    @StateObject private var hermesAdvisor = HermesCompositionAdvisor()
     @State private var showingSettings = false
     @State private var lastAutomaticAnalysis = Date.distantPast
     @State private var lastAutomaticSceneSignature = ""
@@ -12,6 +12,8 @@ struct CameraView: View {
     @State private var feedbackMessage: String?
     @State private var feedbackTask: Task<Void, Never>?
     @State private var isToolPanelExpanded = false
+    @State private var focusIndicatorPoint: CGPoint?
+    @State private var focusIndicatorTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -40,7 +42,7 @@ struct CameraView: View {
         .onChange(of: settings.selectedFilterID) { newValue in
             camera.setSelectedFilter(PhotoFilter.filter(for: newValue))
         }
-        .onChange(of: gptAdvisor.recommendedFilterID) { newValue in
+        .onChange(of: hermesAdvisor.recommendedFilterID) { newValue in
             guard let newValue, PhotoFilter.all.contains(where: { $0.id == newValue }) else { return }
             settings.selectedFilterID = newValue
         }
@@ -48,7 +50,7 @@ struct CameraView: View {
             camera.stop()
         }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            triggerAutomaticGPTIfNeeded()
+            triggerAutomaticHermesIfNeeded()
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView(settings: settings)
@@ -82,6 +84,8 @@ struct CameraView: View {
                 currentZoomFactor: camera.zoomFactor
             )
 
+            focusIndicator
+
             VStack(spacing: 0) {
                 stageTopOverlay
                 Spacer()
@@ -103,9 +107,19 @@ struct CameraView: View {
     @ViewBuilder
     private var cameraSurface: some View {
         if settings.selectedFilterID == PhotoFilter.fallback.id {
-            CameraPreviewView(session: camera.session)
+            CameraPreviewView(
+                session: camera.session,
+                mirrored: camera.cameraPosition == .front
+            ) { devicePoint, layerPoint in
+                handleFocusTap(devicePoint: devicePoint, layerPoint: layerPoint)
+            }
         } else {
-            FilteredCameraPreviewView(image: camera.filteredPreviewImage ?? camera.latestImage)
+            FilteredCameraPreviewView(
+                image: camera.filteredPreviewImage ?? camera.latestImage,
+                mirrored: camera.cameraPosition == .front
+            ) { devicePoint, layerPoint in
+                handleFocusTap(devicePoint: devicePoint, layerPoint: layerPoint)
+            }
         }
     }
 
@@ -130,7 +144,7 @@ struct CameraView: View {
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
-                .frame(maxWidth: 220)
+                .frame(maxWidth: 180)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 10)
                 .background(.black.opacity(0.42), in: Capsule())
@@ -141,17 +155,43 @@ struct CameraView: View {
 
             Spacer()
 
-            Button {
-                buttonFeedback("打开设置")
-                showingSettings = true
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 42, height: 42)
-                    .background(.black.opacity(0.34), in: Circle())
+            HStack(spacing: 8) {
+                Button {
+                    camera.switchCamera()
+                    buttonFeedback(camera.cameraPosition == .back ? "切换前置相机" : "切换后置相机")
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath.camera")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 42, height: 42)
+                        .background(.black.opacity(0.34), in: Circle())
+                }
+                .buttonStyle(PressableButtonStyle())
+
+                Button {
+                    buttonFeedback("打开设置")
+                    showingSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 42, height: 42)
+                        .background(.black.opacity(0.34), in: Circle())
+                }
+                .buttonStyle(PressableButtonStyle())
             }
-            .buttonStyle(PressableButtonStyle())
+        }
+    }
+
+    @ViewBuilder
+    private var focusIndicator: some View {
+        if let focusIndicatorPoint {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(.yellow.opacity(0.92), lineWidth: 2)
+                .frame(width: 72, height: 72)
+                .position(focusIndicatorPoint)
+                .transition(.opacity.combined(with: .scale(scale: 0.82)))
+                .allowsHitTesting(false)
         }
     }
 
@@ -271,7 +311,7 @@ struct CameraView: View {
 
             Spacer(minLength: 8)
 
-            if gptAdvisor.isAnalyzing {
+            if hermesAdvisor.isAnalyzing {
                 ProgressView()
                     .tint(.white)
             } else if let recommendedFilter {
@@ -475,7 +515,7 @@ struct CameraView: View {
 
                 Spacer(minLength: 6)
 
-                if gptAdvisor.isAnalyzing {
+                if hermesAdvisor.isAnalyzing {
                     ProgressView()
                         .tint(.white)
                 }
@@ -507,12 +547,12 @@ struct CameraView: View {
             HStack(spacing: 10) {
                 coachMetric(title: "识别", value: subjectStateText)
                 coachMetric(title: "稳定", value: camera.isFrameStable ? "可分析" : "移动中")
-                coachMetric(title: "模式", value: settings.gptMode.allowsAutomatic ? "自动" : "手动")
+                coachMetric(title: "模式", value: settings.hermesMode.allowsAutomatic ? "自动" : "手动")
             }
 
             HStack(spacing: 10) {
                 Button {
-                    triggerManualGPT()
+                    triggerManualHermes()
                 } label: {
                     Label("AI 识别取景", systemImage: "sparkles")
                         .font(.caption.weight(.bold))
@@ -526,7 +566,7 @@ struct CameraView: View {
                 Button {
                     toggleAIMode()
                 } label: {
-                    Image(systemName: settings.gptMode.allowsAutomatic ? "bolt.circle.fill" : "bolt.slash.circle")
+                    Image(systemName: settings.hermesMode.allowsAutomatic ? "bolt.circle.fill" : "bolt.slash.circle")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(width: 42, height: 38)
@@ -721,19 +761,19 @@ struct CameraView: View {
     private var controls: some View {
         HStack(spacing: 28) {
             Button {
-                triggerManualGPT()
+                triggerManualHermes()
             } label: {
                 VStack(spacing: 6) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 24, weight: .bold))
-                    Text("AI 看一下")
+                    Text("指导")
                         .font(.caption.weight(.semibold))
                 }
                 .foregroundStyle(.white)
                 .frame(width: 84, height: 70)
                 .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
-            .opacity(settings.gptMode.allowsManual ? 1 : 0.45)
+            .opacity(settings.hermesMode.allowsManual ? 1 : 0.45)
             .buttonStyle(PressableButtonStyle())
 
             Button {
@@ -755,9 +795,9 @@ struct CameraView: View {
                 toggleAIMode()
             } label: {
                 VStack(spacing: 6) {
-                    Image(systemName: settings.gptMode.allowsAutomatic ? "bolt.circle.fill" : "bolt.slash.circle")
+                    Image(systemName: settings.hermesMode.allowsAutomatic ? "bolt.circle.fill" : "bolt.slash.circle")
                         .font(.system(size: 24, weight: .bold))
-                    Text(settings.gptMode.allowsAutomatic ? "自动 AI" : "手动 AI")
+                    Text(settings.hermesMode.allowsAutomatic ? "自动 Hermes" : "手动 Hermes")
                         .font(.caption.weight(.semibold))
                 }
                 .foregroundStyle(.white)
@@ -769,13 +809,13 @@ struct CameraView: View {
         .padding(.top, 10)
     }
 
-    private func triggerManualGPT() {
-        guard settings.gptMode.allowsManual else {
-            buttonFeedback("请先在设置中开启手动 AI")
+    private func triggerManualHermes() {
+        guard settings.hermesMode.allowsManual else {
+            buttonFeedback("请先开启手动 Hermes")
             return
         }
-        guard !gptAdvisor.isAnalyzing else {
-            buttonFeedback("AI 正在分析中")
+        guard !hermesAdvisor.isAnalyzing else {
+            buttonFeedback("Hermes 正在取景")
             return
         }
         guard !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -787,10 +827,10 @@ struct CameraView: View {
             return
         }
 
-        buttonFeedback("已开始 AI 分析")
+        buttonFeedback("Hermes 正在指导取景")
         camera.photoStatusText = nil
         Task {
-            await gptAdvisor.analyze(
+            await hermesAdvisor.analyze(
                 image: camera.latestImage,
                 localResult: camera.compositionResult,
                 settings: settings
@@ -799,22 +839,23 @@ struct CameraView: View {
     }
 
     private func toggleAIMode() {
-        if settings.gptMode.allowsAutomatic {
-            settings.gptMode = .manual
-            buttonFeedback("已切换为手动 AI")
+        if settings.hermesMode.allowsAutomatic {
+            settings.hermesMode = .manual
+            buttonFeedback("已切换为手动 Hermes")
         } else {
-            settings.gptMode = .manualAndAutomatic
-            buttonFeedback("已开启自动 AI")
+            settings.hermesMode = .manualAndAutomatic
+            buttonFeedback("已开启自动 Hermes")
         }
     }
 
-    private func triggerAutomaticGPTIfNeeded() {
-        guard settings.gptMode.allowsAutomatic else { return }
-        guard !gptAdvisor.isAnalyzing else { return }
+    private func triggerAutomaticHermesIfNeeded() {
+        guard settings.hermesMode.allowsAutomatic else { return }
+        guard !hermesAdvisor.isAnalyzing else { return }
+        guard !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard camera.isFrameStable else { return }
         guard camera.latestImage != nil else { return }
-        guard Date().timeIntervalSince(lastAutomaticAnalysis) >= settings.automaticGPTInterval else { return }
-        guard hasAutomaticGPTBudget() else { return }
+        guard Date().timeIntervalSince(lastAutomaticAnalysis) >= settings.automaticHermesInterval else { return }
+        guard hasAutomaticHermesBudget() else { return }
 
         let signature = camera.compositionResult?.sceneSignature ?? "no-result"
         guard signature != lastAutomaticSceneSignature else { return }
@@ -824,7 +865,7 @@ struct CameraView: View {
         automaticRequestDates.append(Date())
         camera.photoStatusText = nil
         Task {
-            await gptAdvisor.analyze(
+            await hermesAdvisor.analyze(
                 image: camera.latestImage,
                 localResult: camera.compositionResult,
                 settings: settings
@@ -832,63 +873,63 @@ struct CameraView: View {
         }
     }
 
-    private func hasAutomaticGPTBudget() -> Bool {
+    private func hasAutomaticHermesBudget() -> Bool {
         let cutoff = Date().addingTimeInterval(-60)
         automaticRequestDates = automaticRequestDates.filter { $0 >= cutoff }
         return automaticRequestDates.count < 6
     }
 
     private var recommendedFilter: PhotoFilter? {
-        guard let id = gptAdvisor.recommendedFilterID else { return nil }
+        guard let id = hermesAdvisor.recommendedFilterID else { return nil }
         return PhotoFilter.all.first { $0.id == id }
     }
 
     private var activeCaptureGuidance: CaptureGuidance? {
-        let guidance = gptAdvisor.captureGuidance ?? camera.compositionResult?.liveGuidance
+        let guidance = hermesAdvisor.captureGuidance ?? camera.compositionResult?.liveGuidance
         return normalizedGuidance(guidance)
     }
 
     private var stageHintText: String {
-        if gptAdvisor.isAnalyzing { return "正在识别取景" }
+        if hermesAdvisor.isAnalyzing { return "正在识别取景" }
         if let guidance = activeCaptureGuidance {
             if let zoom = guidance.zoomFactor {
                 return "\(guidance.message) \(zoomLabel(zoom))x"
             }
             return guidance.message
         }
-        if let advice = gptAdvisor.advice, !advice.isEmpty { return advice }
+        if let advice = hermesAdvisor.advice, !advice.isEmpty { return advice }
         if let suggestion = camera.compositionResult?.topSuggestion { return suggestion }
         return "对准主体后按 AI"
     }
 
     private var aiCoachIcon: String {
-        if gptAdvisor.isAnalyzing { return "eye" }
-        if gptAdvisor.errorMessage != nil { return "exclamationmark.triangle" }
-        if gptAdvisor.advice != nil { return "sparkles" }
+        if hermesAdvisor.isAnalyzing { return "eye" }
+        if hermesAdvisor.errorMessage != nil { return "exclamationmark.triangle" }
+        if hermesAdvisor.advice != nil { return "sparkles" }
         if camera.photoStatusText != nil { return "photo" }
         return "viewfinder"
     }
 
     private var aiCoachTitle: String {
-        if gptAdvisor.isAnalyzing { return "AI 正在识别取景" }
-        if gptAdvisor.errorMessage != nil { return "AI 构图未就绪" }
-        if gptAdvisor.advice != nil { return settings.isUsingHermesCameraBrain ? "Hermes 构图建议" : "AI 构图建议" }
+        if hermesAdvisor.isAnalyzing { return "AI 正在识别取景" }
+        if hermesAdvisor.errorMessage != nil { return "AI 构图未就绪" }
+        if hermesAdvisor.advice != nil { return settings.isUsingHermesCameraBrain ? "Hermes 构图建议" : "AI 构图建议" }
         if camera.photoStatusText != nil { return "拍摄结果" }
         return "实时构图提示"
     }
 
     private var aiCoachMessage: String {
-        if gptAdvisor.isAnalyzing { return "保持手机稳定，正在判断主体、留白和角度。" }
-        if let error = gptAdvisor.errorMessage { return error }
+        if hermesAdvisor.isAnalyzing { return "保持手机稳定，正在判断主体、留白和角度。" }
+        if let error = hermesAdvisor.errorMessage { return error }
         if let guidance = activeCaptureGuidance {
             if let zoom = guidance.zoomFactor {
                 return "\(guidance.message)，切到 \(zoomLabel(zoom))x 取景。"
             }
             return guidance.message
         }
-        if let advice = gptAdvisor.advice, !advice.isEmpty { return advice }
+        if let advice = hermesAdvisor.advice, !advice.isEmpty { return advice }
         if let photoStatus = camera.photoStatusText { return photoStatus }
-        return camera.compositionResult?.topSuggestion ?? "对准主体后点击 GPT 识别取景。"
+        return camera.compositionResult?.topSuggestion ?? "对准主体后让 Hermes 指导取景。"
     }
 
     private var subjectStateText: String {
@@ -901,7 +942,7 @@ struct CameraView: View {
     }
 
     private var filterReasonSuffix: String {
-        guard let reason = gptAdvisor.filterReason, !reason.isEmpty else { return "" }
+        guard let reason = hermesAdvisor.filterReason, !reason.isEmpty else { return "" }
         return "：\(reason)"
     }
 
@@ -993,6 +1034,25 @@ struct CameraView: View {
         }
         settings.selectedAspectRatio = ratios[(index + 1) % ratios.count]
         buttonFeedback("取景比例 \(settings.selectedAspectRatio.title)")
+    }
+
+    private func handleFocusTap(devicePoint: CGPoint, layerPoint: CGPoint) {
+        camera.focusAndExpose(at: devicePoint)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.74)) {
+            focusIndicatorPoint = layerPoint
+        }
+
+        focusIndicatorTask?.cancel()
+        focusIndicatorTask = Task {
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    focusIndicatorPoint = nil
+                }
+            }
+        }
     }
 
     private func buttonFeedback(_ message: String) {

@@ -18,6 +18,7 @@ final class CameraSessionController: NSObject, ObservableObject {
     @Published var zoomFactor: CGFloat = 1
     @Published var minZoomFactor: CGFloat = 1
     @Published var maxZoomFactor: CGFloat = 1
+    @Published var cameraPosition: AVCaptureDevice.Position = .back
 
     private let sessionQueue = DispatchQueue(label: "camera.session.queue")
     private let videoOutputQueue = DispatchQueue(label: "camera.video.output.queue")
@@ -30,6 +31,7 @@ final class CameraSessionController: NSObject, ObservableObject {
     private let captureAspectRatioLock = NSLock()
     private let ciContext = CIContext()
     private var videoDevice: AVCaptureDevice?
+    private var videoInput: AVCaptureDeviceInput?
     private var activeFilter = PhotoFilter.fallback
     private var pendingCaptureAspectRatio = ShootingAspectRatio.full
     private var lastAnalysisTime = Date.distantPast
@@ -119,6 +121,61 @@ final class CameraSessionController: NSObject, ObservableObject {
         }
     }
 
+    func switchCamera() {
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            let nextPosition: AVCaptureDevice.Position = self.cameraPosition == .back ? .front : .back
+            self.session.beginConfiguration()
+            let didSwitch = self.configureVideoInput(position: nextPosition)
+            self.applyVideoConnectionSettings(position: didSwitch ? nextPosition : self.cameraPosition)
+            self.session.commitConfiguration()
+
+            DispatchQueue.main.async {
+                if didSwitch {
+                    self.cameraPosition = nextPosition
+                    self.photoStatusText = nextPosition == .front ? "已切换前置相机。" : "已切换后置相机。"
+                } else {
+                    self.photoStatusText = "当前设备无法切换相机。"
+                }
+            }
+        }
+    }
+
+    func focusAndExpose(at devicePoint: CGPoint) {
+        sessionQueue.async { [weak self] in
+            guard let self, let device = self.videoDevice else { return }
+            let point = CGPoint(
+                x: min(max(devicePoint.x, 0), 1),
+                y: min(max(devicePoint.y, 0), 1)
+            )
+
+            do {
+                try device.lockForConfiguration()
+                if device.isFocusPointOfInterestSupported {
+                    device.focusPointOfInterest = point
+                    if device.isFocusModeSupported(.autoFocus) {
+                        device.focusMode = .autoFocus
+                    }
+                }
+                if device.isExposurePointOfInterestSupported {
+                    device.exposurePointOfInterest = point
+                    if device.isExposureModeSupported(.continuousAutoExposure) {
+                        device.exposureMode = .continuousAutoExposure
+                    }
+                }
+                device.unlockForConfiguration()
+
+                DispatchQueue.main.async {
+                    self.photoStatusText = "已锁定对焦和曝光。"
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.photoStatusText = "对焦失败：\(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
     private func configureAndStartSession() {
         if session.isRunning { return }
 
@@ -130,15 +187,10 @@ final class CameraSessionController: NSObject, ObservableObject {
                 session.commitConfiguration()
             }
 
-            guard let device = preferredBackCamera(),
-                  let input = try? AVCaptureDeviceInput(device: device),
-                  session.canAddInput(input) else {
+            guard configureVideoInput(position: .back) else {
                 DispatchQueue.main.async { self.statusText = "无法打开后置相机" }
                 return
             }
-
-            videoDevice = device
-            session.addInput(input)
 
             videoOutput.videoSettings = [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
@@ -154,9 +206,7 @@ final class CameraSessionController: NSObject, ObservableObject {
                 session.addOutput(photoOutput)
             }
 
-            videoOutput.connection(with: .video)?.videoOrientation = .portrait
-            photoOutput.connection(with: .video)?.videoOrientation = .portrait
-            publishZoomBounds(for: device)
+            applyVideoConnectionSettings(position: .back)
             isSessionConfigured = true
         }
 
@@ -165,7 +215,37 @@ final class CameraSessionController: NSObject, ObservableObject {
         DispatchQueue.main.async { self.statusText = "实时构图分析中" }
     }
 
-    private func preferredBackCamera() -> AVCaptureDevice? {
+    private func configureVideoInput(position: AVCaptureDevice.Position) -> Bool {
+        guard let device = preferredCamera(position: position),
+              let input = try? AVCaptureDeviceInput(device: device) else {
+            return false
+        }
+
+        let previousInput = videoInput
+        if let previousInput {
+            session.removeInput(previousInput)
+        }
+
+        guard session.canAddInput(input) else {
+            if let previousInput, session.canAddInput(previousInput) {
+                session.addInput(previousInput)
+            }
+            return false
+        }
+
+        session.addInput(input)
+        videoDevice = device
+        videoInput = input
+        publishZoomBounds(for: device)
+        return true
+    }
+
+    private func preferredCamera(position: AVCaptureDevice.Position) -> AVCaptureDevice? {
+        if position == .front {
+            return AVCaptureDevice.default(.builtInTrueDepthCamera, for: .video, position: .front) ??
+            AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
+        }
+
         let discovery = AVCaptureDevice.DiscoverySession(
             deviceTypes: [
                 .builtInTripleCamera,
@@ -174,9 +254,18 @@ final class CameraSessionController: NSObject, ObservableObject {
                 .builtInWideAngleCamera
             ],
             mediaType: .video,
-            position: .back
+            position: position
         )
         return discovery.devices.first ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+    }
+
+    private func applyVideoConnectionSettings(position: AVCaptureDevice.Position) {
+        [videoOutput.connection(with: .video), photoOutput.connection(with: .video)].forEach { connection in
+            connection?.videoOrientation = .portrait
+            if connection?.isVideoMirroringSupported == true {
+                connection?.isVideoMirrored = position == .front
+            }
+        }
     }
 
     private func publishZoomBounds(for device: AVCaptureDevice) {

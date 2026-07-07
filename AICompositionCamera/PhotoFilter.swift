@@ -270,7 +270,7 @@ struct PhotoFilter: Identifiable, Equatable {
         }
     }
 
-    static var gptCatalog: String {
+    static var hermesCatalog: String {
         all.map { "\($0.id): \($0.title)，\($0.aiDescription)" }.joined(separator: "\n")
     }
 

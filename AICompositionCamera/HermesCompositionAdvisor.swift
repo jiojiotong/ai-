@@ -3,7 +3,7 @@ import Foundation
 import UIKit
 
 @MainActor
-final class GPTCompositionAdvisor: ObservableObject {
+final class HermesCompositionAdvisor: ObservableObject {
     @Published var isAnalyzing = false
     @Published var advice: String?
     @Published var captureGuidance: CaptureGuidance?
@@ -12,9 +12,9 @@ final class GPTCompositionAdvisor: ObservableObject {
     @Published var errorMessage: String?
 
     func analyze(image: UIImage?, localResult: CompositionResult?, settings: SettingsStore) async {
-        guard settings.gptMode != .off else { return }
+        guard settings.hermesMode != .off else { return }
         guard !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "请先在设置里填写 OpenAI API Key。"
+            errorMessage = "请先在设置里填写 Hermes API Key。"
             return
         }
         guard let image, let jpegData = compressedJPEG(from: image) else {
@@ -32,7 +32,7 @@ final class GPTCompositionAdvisor: ObservableObject {
         do {
             let response = try await requestAdvice(
                 jpegData: jpegData,
-                localContext: localResult?.gptContext ?? "No local context.",
+                localContext: localResult?.hermesContext ?? "No local context.",
                 aspectRatioTitle: settings.selectedAspectRatio.title,
                 apiKey: settings.apiKey,
                 apiBaseURL: settings.apiBaseURL,
@@ -44,7 +44,7 @@ final class GPTCompositionAdvisor: ObservableObject {
             recommendedFilterID = parsed.filterID
             filterReason = parsed.filterReason
         } catch {
-            errorMessage = "GPT 分析失败：\(error.localizedDescription)"
+            errorMessage = "Hermes 分析失败：\(error.localizedDescription)"
         }
 
         isAnalyzing = false
@@ -72,7 +72,7 @@ final class GPTCompositionAdvisor: ObservableObject {
         model: String
     ) async throws -> String {
         guard let url = chatCompletionsURL(from: apiBaseURL) else {
-            throw GPTError.invalidBaseURL
+            throw HermesError.invalidBaseURL
         }
 
         var request = URLRequest(url: url)
@@ -93,7 +93,7 @@ final class GPTCompositionAdvisor: ObservableObject {
         当前取景比例：\(aspectRatioTitle)
         本地端侧检测结果：\(localContext)
         可选滤镜：
-        \(PhotoFilter.gptCatalog)
+        \(PhotoFilter.hermesCatalog)
         输出格式必须严格使用五行：
         动作：...
         移动：left/right/up/down/closer/farther/hold
@@ -103,7 +103,7 @@ final class GPTCompositionAdvisor: ObservableObject {
         """
 
         let body: [String: Any] = [
-            "model": model.isEmpty ? "gpt-4o" : model,
+            "model": model.isEmpty ? "ai-camera-agent" : model,
             "messages": [
                 [
                     "role": "user",
@@ -123,19 +123,19 @@ final class GPTCompositionAdvisor: ObservableObject {
         guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
             let message = String(data: data, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            throw GPTError.badResponse(message)
+            throw HermesError.badResponse(message)
         }
 
-        let decoded = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        let decoded = try JSONDecoder().decode(HermesChatResponse.self, from: data)
         guard let content = decoded.choices.first?.message.content.trimmingCharacters(in: .whitespacesAndNewlines), !content.isEmpty else {
-            throw GPTError.emptyResponse
+            throw HermesError.emptyResponse
         }
         return content
     }
 
     private func chatCompletionsURL(from apiBaseURL: String) -> URL? {
         let trimmed = apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseURLString = trimmed.isEmpty ? "https://api.openai.com/v1" : trimmed
+        let baseURLString = trimmed.isEmpty ? "https://api.anyther.top/hermes-ai-camera/v1" : trimmed
         guard let baseURL = URL(string: baseURLString), let scheme = baseURL.scheme, !scheme.isEmpty else {
             return nil
         }
@@ -252,7 +252,7 @@ final class GPTCompositionAdvisor: ObservableObject {
     }
 }
 
-private struct OpenAIChatResponse: Decodable {
+private struct HermesChatResponse: Decodable {
     var choices: [Choice]
 
     struct Choice: Decodable {
@@ -264,7 +264,7 @@ private struct OpenAIChatResponse: Decodable {
     }
 }
 
-private enum GPTError: LocalizedError {
+private enum HermesError: LocalizedError {
     case badResponse(String?)
     case emptyResponse
     case invalidBaseURL

@@ -6,12 +6,12 @@ final class SettingsStore: ObservableObject {
     static let hermesCameraBaseURL = "https://api.anyther.top/hermes-ai-camera/v1"
     static let hermesCameraModel = "ai-camera-agent"
 
-    @Published var gptMode: GPTMode {
-        didSet { UserDefaults.standard.set(gptMode.rawValue, forKey: Keys.gptMode) }
+    @Published var hermesMode: HermesMode {
+        didSet { UserDefaults.standard.set(hermesMode.rawValue, forKey: Keys.hermesMode) }
     }
 
-    @Published var automaticGPTInterval: TimeInterval {
-        didSet { UserDefaults.standard.set(automaticGPTInterval, forKey: Keys.automaticGPTInterval) }
+    @Published var automaticHermesInterval: TimeInterval {
+        didSet { UserDefaults.standard.set(automaticHermesInterval, forKey: Keys.automaticHermesInterval) }
     }
 
     @Published var overlayIntensity: OverlayIntensity {
@@ -54,24 +54,34 @@ final class SettingsStore: ObservableObject {
 
     init() {
         let defaults = UserDefaults.standard
-        gptMode = GPTMode(rawValue: defaults.string(forKey: Keys.gptMode) ?? "manual") ?? .manual
-        automaticGPTInterval = defaults.object(forKey: Keys.automaticGPTInterval) as? TimeInterval ?? 10
+        hermesMode = HermesMode(rawValue: defaults.string(forKey: Keys.hermesMode) ?? "manualAndAutomatic") ?? .manualAndAutomatic
+        automaticHermesInterval = defaults.object(forKey: Keys.automaticHermesInterval) as? TimeInterval ?? 5
         overlayIntensity = OverlayIntensity(rawValue: defaults.string(forKey: Keys.overlayIntensity) ?? "normal") ?? .normal
-        apiKey = KeychainStore.read(service: Keys.keychainService, account: Keys.apiKey)
-        model = defaults.string(forKey: Keys.model) ?? "gpt-4o"
-        apiBaseURL = defaults.string(forKey: Keys.apiBaseURL) ?? "https://api.openai.com/v1"
+        let hermesKey = KeychainStore.read(service: Keys.keychainService, account: Keys.apiKey)
+        let legacyKey = KeychainStore.read(service: Keys.keychainService, account: LegacyKeys.apiKey)
+        apiKey = hermesKey.isEmpty ? legacyKey : hermesKey
+        let storedModel = defaults.string(forKey: Keys.model) ?? defaults.string(forKey: LegacyKeys.model)
+        model = storedModel == nil || storedModel == "gpt-4o" ? Self.hermesCameraModel : storedModel ?? Self.hermesCameraModel
+        let storedBaseURL = defaults.string(forKey: Keys.apiBaseURL) ?? defaults.string(forKey: LegacyKeys.apiBaseURL)
+        apiBaseURL = storedBaseURL == nil || storedBaseURL == "https://api.openai.com/v1" ? Self.hermesCameraBaseURL : storedBaseURL ?? Self.hermesCameraBaseURL
         selectedFilterID = defaults.string(forKey: Keys.selectedFilterID) ?? PhotoFilter.fallback.id
         selectedCameraMode = CameraFeatureMode(rawValue: defaults.string(forKey: Keys.selectedCameraMode) ?? "aiComposition") ?? .aiComposition
         selectedFilterCategory = FilterCategory(rawValue: defaults.string(forKey: Keys.selectedFilterCategory) ?? "portrait") ?? .portrait
         selectedPortraitEnhancementID = defaults.string(forKey: Keys.selectedPortraitEnhancementID) ?? PortraitEnhancement.natural.id
         selectedAspectRatio = ShootingAspectRatio(rawValue: defaults.string(forKey: Keys.selectedAspectRatio) ?? "full") ?? .full
+
+        defaults.set(model, forKey: Keys.model)
+        defaults.set(apiBaseURL, forKey: Keys.apiBaseURL)
+        if !apiKey.isEmpty {
+            KeychainStore.save(apiKey, service: Keys.keychainService, account: Keys.apiKey)
+        }
     }
 
     func useHermesCameraBrain() {
         apiBaseURL = Self.hermesCameraBaseURL
         model = Self.hermesCameraModel
-        if gptMode == .off {
-            gptMode = .manual
+        if hermesMode == .off {
+            hermesMode = .manual
         }
     }
 
@@ -131,7 +141,7 @@ enum CameraFeatureMode: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .photo: return "像胶片相机一样快速选预设、调比例、按下快门。"
-        case .aiComposition: return "把本地构图检测、GPT 建议和推荐滤镜集中在拍摄前完成。"
+        case .aiComposition: return "把本地构图检测、Hermes 建议和推荐滤镜集中在拍摄前完成。"
         case .portrait: return "优先适配人脸、人像和半身照片的色彩氛围。"
         case .beauty: return "只做亮度、肤色和柔和度增强，不做变形美颜。"
         case .filters: return "按场景分类选择滤镜，避免在长列表里反复滑动。"
@@ -189,7 +199,7 @@ enum ShootingAspectRatio: String, CaseIterable, Identifiable {
     }
 }
 
-enum GPTMode: String, CaseIterable, Identifiable {
+enum HermesMode: String, CaseIterable, Identifiable {
     case off
     case manual
     case automatic
@@ -232,16 +242,22 @@ enum OverlayIntensity: String, CaseIterable, Identifiable {
 }
 
 private enum Keys {
-    static let gptMode = "gptMode"
-    static let automaticGPTInterval = "automaticGPTInterval"
+    static let hermesMode = "hermesMode"
+    static let automaticHermesInterval = "automaticHermesInterval"
     static let overlayIntensity = "overlayIntensity"
-    static let apiKey = "openAIAPIKey"
-    static let model = "openAIModel"
-    static let apiBaseURL = "openAIAPIBaseURL"
+    static let apiKey = "hermesAPIKey"
+    static let model = "hermesModel"
+    static let apiBaseURL = "hermesAPIBaseURL"
     static let selectedFilterID = "selectedFilterID"
     static let selectedCameraMode = "selectedCameraMode"
     static let selectedFilterCategory = "selectedFilterCategory"
     static let selectedPortraitEnhancementID = "selectedPortraitEnhancementID"
     static let selectedAspectRatio = "selectedAspectRatio"
     static let keychainService = "AICompositionCamera"
+}
+
+private enum LegacyKeys {
+    static let apiKey = "openAIAPIKey"
+    static let model = "openAIModel"
+    static let apiBaseURL = "openAIAPIBaseURL"
 }

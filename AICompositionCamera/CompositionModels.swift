@@ -33,7 +33,7 @@ struct CompositionResult {
         rules.compactMap(\.overlay)
     }
 
-    var gptContext: String {
+    var hermesContext: String {
         let topRules = rules
             .sorted { $0.priority > $1.priority }
             .prefix(4)
