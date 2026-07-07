@@ -10,6 +10,7 @@ final class CameraSessionController: NSObject, ObservableObject {
     @Published var authorizationStatus: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
     @Published var compositionResult: CompositionResult?
     @Published var latestImage: UIImage?
+    @Published var filteredPreviewImage: UIImage?
     @Published var selectedFilter = PhotoFilter.fallback
     @Published var isFrameStable = false
     @Published var statusText = "等待相机权限"
@@ -23,10 +24,13 @@ final class CameraSessionController: NSObject, ObservableObject {
     private let compositionEngine = CompositionEngine()
     private let filterEngine = FilterEngine()
     private let filterLock = NSLock()
+    private let captureAspectRatioLock = NSLock()
     private let ciContext = CIContext()
     private var activeFilter = PhotoFilter.fallback
+    private var pendingCaptureAspectRatio = ShootingAspectRatio.full
     private var lastAnalysisTime = Date.distantPast
     private var lastImageUpdateTime = Date.distantPast
+    private var lastPreviewUpdateTime = Date.distantPast
     private var lastCompositionUpdateTime = Date.distantPast
     private var lastPublishedResult: CompositionResult?
     private var lastSubjectCenter: CGPoint?
@@ -60,13 +64,15 @@ final class CameraSessionController: NSObject, ObservableObject {
         }
     }
 
-    func capturePhoto() {
+    func capturePhoto(aspectRatio: ShootingAspectRatio) {
         sessionQueue.async { [weak self] in
             guard let self else { return }
             guard self.session.isRunning else {
                 DispatchQueue.main.async { self.photoStatusText = "相机还没准备好。" }
                 return
             }
+            self.setPendingCaptureAspectRatio(aspectRatio)
+            DispatchQueue.main.async { self.photoStatusText = "正在处理照片..." }
             let settings = AVCapturePhotoSettings()
             self.photoOutput.capturePhoto(with: settings, delegate: self)
         }
@@ -79,6 +85,7 @@ final class CameraSessionController: NSObject, ObservableObject {
 
         DispatchQueue.main.async {
             self.selectedFilter = filter
+            self.filteredPreviewImage = nil
         }
     }
 
@@ -149,8 +156,13 @@ final class CameraSessionController: NSObject, ObservableObject {
         let result = compositionEngine.evaluate(observations: observations)
         let stable = updateStability(subjectCenter: result.primarySubject?.rect.center)
         let shouldUpdateImage = now.timeIntervalSince(lastImageUpdateTime) >= 1
+        let shouldUpdatePreview = now.timeIntervalSince(lastPreviewUpdateTime) >= 0.12
+        let filter = currentFilter()
         let originalImage = shouldUpdateImage ? makeUIImage(from: pixelBuffer) : nil
         if shouldUpdateImage { lastImageUpdateTime = now }
+        let shouldUpdateFilteredPreview = shouldUpdatePreview && filter.id != PhotoFilter.fallback.id
+        let filteredPreviewImage = shouldUpdateFilteredPreview ? makeFilteredPreviewImage(from: pixelBuffer, filter: filter) : nil
+        if shouldUpdateFilteredPreview { lastPreviewUpdateTime = now }
         let displayedResult = compositionResultToPublish(result, now: now)
 
         DispatchQueue.main.async {
@@ -159,6 +171,9 @@ final class CameraSessionController: NSObject, ObservableObject {
             }
             if let originalImage {
                 self.latestImage = originalImage
+            }
+            if let filteredPreviewImage {
+                self.filteredPreviewImage = filteredPreviewImage
             }
             self.isFrameStable = stable
         }
@@ -200,11 +215,30 @@ final class CameraSessionController: NSObject, ObservableObject {
         return UIImage(cgImage: cgImage)
     }
 
+    private func makeFilteredPreviewImage(from pixelBuffer: CVPixelBuffer, filter: PhotoFilter) -> UIImage? {
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(.right)
+        let filteredImage = filterEngine.apply(filter: filter, to: ciImage)
+        return filterEngine.makeUIImage(from: filteredImage)
+    }
+
     private func currentFilter() -> PhotoFilter {
         filterLock.lock()
         let filter = activeFilter
         filterLock.unlock()
         return filter
+    }
+
+    private func setPendingCaptureAspectRatio(_ aspectRatio: ShootingAspectRatio) {
+        captureAspectRatioLock.lock()
+        pendingCaptureAspectRatio = aspectRatio
+        captureAspectRatioLock.unlock()
+    }
+
+    private func currentCaptureAspectRatio() -> ShootingAspectRatio {
+        captureAspectRatioLock.lock()
+        let aspectRatio = pendingCaptureAspectRatio
+        captureAspectRatioLock.unlock()
+        return aspectRatio
     }
 }
 
@@ -224,11 +258,54 @@ extension CameraSessionController: AVCapturePhotoCaptureDelegate {
         didFinishProcessingPhoto photo: AVCapturePhoto,
         error: Error?
     ) {
-        guard error == nil, let data = photo.fileDataRepresentation(), let image = UIImage(data: data) else { return }
-        let outputImage = filterEngine.apply(filter: currentFilter(), to: image) ?? image
+        if let error {
+            DispatchQueue.main.async {
+                self.photoStatusText = "拍照失败：\(error.localizedDescription)"
+            }
+            return
+        }
+
+        guard let data = photo.fileDataRepresentation(), let image = UIImage(data: data) else {
+            DispatchQueue.main.async {
+                self.photoStatusText = "拍照失败：无法读取照片。"
+            }
+            return
+        }
+
+        let filteredImage = filterEngine.apply(filter: currentFilter(), to: image) ?? image
+        let outputImage = crop(filteredImage, to: currentCaptureAspectRatio()) ?? filteredImage
         saveToPhotoLibrary(outputImage)
         DispatchQueue.main.async {
             self.latestImage = outputImage
+        }
+    }
+
+    private func crop(_ image: UIImage, to aspectRatio: ShootingAspectRatio) -> UIImage? {
+        guard let targetRatio = aspectRatio.numericRatio else { return image }
+        let imageSize = image.size
+        guard imageSize.width > 0, imageSize.height > 0 else { return image }
+
+        let currentRatio = imageSize.width / imageSize.height
+        let cropSize: CGSize
+        if currentRatio > targetRatio {
+            cropSize = CGSize(width: imageSize.height * targetRatio, height: imageSize.height)
+        } else {
+            cropSize = CGSize(width: imageSize.width, height: imageSize.width / targetRatio)
+        }
+
+        let cropOrigin = CGPoint(
+            x: (imageSize.width - cropSize.width) / 2,
+            y: (imageSize.height - cropSize.height) / 2
+        )
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        format.opaque = false
+
+        return UIGraphicsImageRenderer(size: cropSize, format: format).image { _ in
+            image.draw(
+                at: CGPoint(x: -cropOrigin.x, y: -cropOrigin.y)
+            )
         }
     }
 

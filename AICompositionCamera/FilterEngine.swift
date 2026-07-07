@@ -121,6 +121,47 @@ final class FilterEngine {
                 .applyingExposure(0.1)
                 .applyingTemperature(neutral: CIVector(x: 6500, y: 0), target: CIVector(x: 7000, y: 5))
                 .applyingColorControls(saturation: 0.98, brightness: 0.035, contrast: 0.88)
+        case "film160C":
+            return image
+                .applyingTemperature(neutral: CIVector(x: 6500, y: 0), target: CIVector(x: 5600, y: 18))
+                .applyingColorControls(saturation: 0.82, brightness: 0.015, contrast: 1.12)
+                .applyingHighlightShadow(highlight: 0.72, shadow: 0.18)
+                .applyingToneCurve(p0: (0, 0.03), p1: (0.25, 0.23), p2: (0.5, 0.51), p3: (0.75, 0.79), p4: (1, 0.98))
+        case "film400H":
+            return image
+                .applyingTemperature(neutral: CIVector(x: 6500, y: 0), target: CIVector(x: 6700, y: -45))
+                .applyingExposure(0.08)
+                .applyingColorControls(saturation: 0.92, brightness: 0.02, contrast: 0.92)
+                .applyingHighlightShadow(highlight: 0.68, shadow: 0.28)
+        case "classicChromeAI":
+            return image
+                .applyingTemperature(neutral: CIVector(x: 6500, y: 0), target: CIVector(x: 6100, y: -18))
+                .applyingColorControls(saturation: 0.78, brightness: 0.005, contrast: 1.18)
+                .applyingHighlightShadow(highlight: 0.78, shadow: 0.1)
+                .applyingToneCurve(p0: (0, 0.02), p1: (0.25, 0.2), p2: (0.5, 0.5), p3: (0.75, 0.82), p4: (1, 0.98))
+        case "classicNegAI":
+            return image
+                .applyingTemperature(neutral: CIVector(x: 6500, y: 0), target: CIVector(x: 7600, y: -25))
+                .applyingColorControls(saturation: 1.06, brightness: -0.02, contrast: 1.32)
+                .applyingHighlightShadow(highlight: 0.9, shadow: 0.04)
+                .applyingToneCurve(p0: (0, 0), p1: (0.25, 0.14), p2: (0.5, 0.48), p3: (0.75, 0.86), p4: (1, 1))
+        case "vista800AI":
+            return image
+                .applyingTemperature(neutral: CIVector(x: 6500, y: 0), target: CIVector(x: 7900, y: 12))
+                .applyingExposure(0.1)
+                .applyingColorControls(saturation: 1.16, brightness: 0.025, contrast: 1.04)
+                .applyingHighlightShadow(highlight: 0.76, shadow: 0.24)
+        case "superia100AI":
+            return image
+                .applyingTemperature(neutral: CIVector(x: 6500, y: 0), target: CIVector(x: 6300, y: -38))
+                .applyingExposure(0.06)
+                .applyingColorControls(saturation: 1.08, brightness: 0.018, contrast: 1.08)
+                .applyingHighlightShadow(highlight: 0.78, shadow: 0.18)
+        case "superia400AI":
+            return image
+                .applyingTemperature(neutral: CIVector(x: 6500, y: 0), target: CIVector(x: 7000, y: -16))
+                .applyingColorControls(saturation: 1.03, brightness: 0.012, contrast: 1.1)
+                .applyingHighlightShadow(highlight: 0.8, shadow: 0.16)
         default:
             return image
         }

@@ -23,6 +23,10 @@ final class CompositionEngine {
             rules.append(contentsOf: portraitRules(face: face))
         }
 
+        if let human = observations.humans.sorted(by: { $0.area > $1.area }).first {
+            rules.append(contentsOf: bodyRules(human: human))
+        }
+
         return CompositionResult(
             rules: rules,
             primarySubject: subject,
@@ -88,6 +92,18 @@ final class CompositionEngine {
             ))
         }
 
+        if subject.rect.area > 0.62 {
+            rules.append(CompositionRuleResult(
+                id: "subject-too-large",
+                category: .general,
+                score: 0.52,
+                confidence: 0.66,
+                priority: 76,
+                suggestion: "主体占比偏满，稍微后退一点。",
+                overlay: .subjectBox(subject.rect)
+            ))
+        }
+
         if subject.rect.minX < 0.05 || subject.rect.maxX > 0.95 {
             rules.append(CompositionRuleResult(
                 id: "subject-edge",
@@ -97,6 +113,32 @@ final class CompositionEngine {
                 priority: 82,
                 suggestion: "主体太贴边了，给边缘留一点呼吸感。",
                 overlay: .subjectBox(subject.rect)
+            ))
+        }
+
+        if subject.rect.minY < 0.04 || subject.rect.maxY > 0.96 {
+            rules.append(CompositionRuleResult(
+                id: "subject-vertical-edge",
+                category: .general,
+                score: 0.55,
+                confidence: 0.7,
+                priority: 80,
+                suggestion: "上下边缘太紧，给主体多留一点空间。",
+                overlay: .subjectBox(subject.rect)
+            ))
+        }
+
+        let nearestThirdY = nearest(center.y, in: [CGFloat(1.0 / 3.0), CGFloat(2.0 / 3.0), 0.5])
+        let verticalDistance = abs(center.y - nearestThirdY)
+        if verticalDistance > 0.17 {
+            rules.append(CompositionRuleResult(
+                id: "vertical-balance",
+                category: .general,
+                score: Double(max(0, 1 - verticalDistance * 2.2)),
+                confidence: 0.58,
+                priority: 58,
+                suggestion: "调整上下留白，让主体更接近三分线。",
+                overlay: .arrow(direction: center.y < 0.5 ? .down : .up, origin: center)
             ))
         }
 
@@ -119,6 +161,18 @@ final class CompositionEngine {
             ))
         }
 
+        if eyeLineY < 0.22 {
+            rules.append(CompositionRuleResult(
+                id: "eye-line-high",
+                category: .portrait,
+                score: 0.58,
+                confidence: 0.62,
+                priority: 68,
+                suggestion: "眼睛位置偏高，镜头稍微降低一点。",
+                overlay: .arrow(direction: .down, origin: face.center)
+            ))
+        }
+
         if face.minY < 0.05 {
             rules.append(CompositionRuleResult(
                 id: "headroom-tight",
@@ -128,6 +182,60 @@ final class CompositionEngine {
                 priority: 86,
                 suggestion: "头顶空间太紧，镜头稍微向上留一点。",
                 overlay: .faceBox(face)
+            ))
+        }
+
+        if face.minY > 0.2 {
+            rules.append(CompositionRuleResult(
+                id: "headroom-loose",
+                category: .portrait,
+                score: 0.62,
+                confidence: 0.6,
+                priority: 62,
+                suggestion: "头顶留白偏多，可以稍微靠近一点。",
+                overlay: .faceBox(face)
+            ))
+        }
+
+        if face.minX < 0.07 || face.maxX > 0.93 {
+            rules.append(CompositionRuleResult(
+                id: "face-edge",
+                category: .portrait,
+                score: 0.56,
+                confidence: 0.72,
+                priority: 84,
+                suggestion: "脸太靠边了，给侧脸留一点空间。",
+                overlay: .faceBox(face)
+            ))
+        }
+
+        return rules
+    }
+
+    private func bodyRules(human: CGRect) -> [CompositionRuleResult] {
+        var rules: [CompositionRuleResult] = []
+
+        if human.minY < 0.02 || human.maxY > 0.98 {
+            rules.append(CompositionRuleResult(
+                id: "body-vertical-crop",
+                category: .portrait,
+                score: 0.5,
+                confidence: 0.7,
+                priority: 83,
+                suggestion: "人物上下快被裁掉了，稍微后退一点。",
+                overlay: .subjectBox(human)
+            ))
+        }
+
+        if human.minX < 0.03 || human.maxX > 0.97 {
+            rules.append(CompositionRuleResult(
+                id: "body-horizontal-crop",
+                category: .portrait,
+                score: 0.52,
+                confidence: 0.68,
+                priority: 79,
+                suggestion: "人物侧边太紧，镜头稍微挪开一点。",
+                overlay: .subjectBox(human)
             ))
         }
 

@@ -196,6 +196,55 @@ struct PhotoFilter: Identifiable, Equatable {
             subtitle: "暖肤提亮",
             category: .portrait,
             aiDescription: "轻微提亮、暖肤、低对比，适合近景人像和自拍，不做磨皮变形。"
+        ),
+        PhotoFilter(
+            id: "film160C",
+            title: "160C",
+            subtitle: "冷净胶片",
+            category: .film,
+            aiDescription: "冷净、低饱和、细节清晰，适合阴天、街景、建筑和安静日常。"
+        ),
+        PhotoFilter(
+            id: "film400H",
+            title: "400H",
+            subtitle: "青绿柔光",
+            category: .film,
+            aiDescription: "青绿色阴影、柔和高光，适合人像、咖啡馆、窗边光和旅行记录。"
+        ),
+        PhotoFilter(
+            id: "classicChromeAI",
+            title: "Classic Chrome",
+            subtitle: "扫街质感",
+            category: .film,
+            aiDescription: "低饱和、微暖、锐度感更强，适合日常扫街、城市细节和纪实照片。"
+        ),
+        PhotoFilter(
+            id: "classicNegAI",
+            title: "Classic Neg",
+            subtitle: "浓郁负片",
+            category: .film,
+            aiDescription: "负片感、强对比和偏暖暗部，适合夜晚、人文、旧街和情绪感照片。"
+        ),
+        PhotoFilter(
+            id: "vista800AI",
+            title: "Vista 800",
+            subtitle: "暖亮颗粒",
+            category: .film,
+            aiDescription: "暖亮、彩色更活泼，适合室内灯光、美食、朋友聚会和生活瞬间。"
+        ),
+        PhotoFilter(
+            id: "superia100AI",
+            title: "Superia 100",
+            subtitle: "清透日光",
+            category: .film,
+            aiDescription: "晴天清透、绿蓝更干净，适合户外、植物、天空和旅行风景。"
+        ),
+        PhotoFilter(
+            id: "superia400AI",
+            title: "Superia 400",
+            subtitle: "日常万能",
+            category: .film,
+            aiDescription: "平衡、微暖、对比适中，适合日常记录、街拍、人像和静物。"
         )
     ]
 
@@ -205,17 +254,67 @@ struct PhotoFilter: Identifiable, Equatable {
         all.first { $0.id == id } ?? fallback
     }
 
+    static func matching(_ rawValue: String) -> PhotoFilter? {
+        let normalized = rawValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "`\"'。，,：:"))
+        let token = normalized
+            .components(separatedBy: CharacterSet(charactersIn: " \t\n\r，,。.;；:：()（）[]【】"))
+            .first ?? normalized
+
+        return all.first {
+            $0.id.caseInsensitiveCompare(normalized) == .orderedSame ||
+            $0.id.caseInsensitiveCompare(token) == .orderedSame ||
+            $0.title.caseInsensitiveCompare(normalized) == .orderedSame ||
+            normalized.localizedCaseInsensitiveContains($0.title)
+        }
+    }
+
     static var gptCatalog: String {
         all.map { "\($0.id): \($0.title)，\($0.aiDescription)" }.joined(separator: "\n")
+    }
+
+    static func filters(in category: FilterCategory) -> [PhotoFilter] {
+        all.filter { $0.category == category }
+    }
+
+    static var spotlight: [PhotoFilter] {
+        ["classicChromeAI", "film400H", "superia400AI", "vista800AI", "tealOrange", "skinGlow"]
+            .map(filter(for:))
     }
 }
 
 enum FilterCategory: String {
     case neutral
+    case film
     case portrait
     case street
     case landscape
     case night
     case blackAndWhite
     case creative
+
+    var title: String {
+        switch self {
+        case .neutral: return "推荐"
+        case .film: return "胶片"
+        case .portrait: return "人像"
+        case .street: return "街拍"
+        case .landscape: return "风景"
+        case .night: return "夜景"
+        case .blackAndWhite: return "黑白"
+        case .creative: return "创意"
+        }
+    }
+
+    static let displayOrder: [FilterCategory] = [
+        .neutral,
+        .film,
+        .portrait,
+        .landscape,
+        .night,
+        .street,
+        .blackAndWhite,
+        .creative
+    ]
 }

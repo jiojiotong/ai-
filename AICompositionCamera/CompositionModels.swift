@@ -7,9 +7,10 @@ struct VisionObservations {
     var frameSize: CGSize
 
     var displayAspectRatio: CGFloat {
-        guard frameSize.width > 0 else { return 9.0 / 16.0 }
-        // Camera buffers are analyzed in portrait via `.right` orientation.
-        return frameSize.height / frameSize.width
+        let shortSide = min(frameSize.width, frameSize.height)
+        let longSide = max(frameSize.width, frameSize.height)
+        guard shortSide > 0, longSide > 0 else { return 9.0 / 16.0 }
+        return shortSide / longSide
     }
 }
 
