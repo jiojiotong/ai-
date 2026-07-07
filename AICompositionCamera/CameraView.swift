@@ -11,34 +11,28 @@ struct CameraView: View {
     @State private var automaticRequestDates: [Date] = []
     @State private var feedbackMessage: String?
     @State private var feedbackTask: Task<Void, Never>?
+    @State private var isToolPanelExpanded = false
 
     var body: some View {
         ZStack {
-            if settings.selectedFilterID == PhotoFilter.fallback.id {
-                CameraPreviewView(session: camera.session)
-                    .ignoresSafeArea()
-            } else {
-                FilteredCameraPreviewView(image: camera.filteredPreviewImage ?? camera.latestImage)
-                    .ignoresSafeArea()
+            Color.black.ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                topBar
+                cameraStage
+                lowerChrome
             }
-
-            OverlayView(result: camera.compositionResult, intensity: settings.overlayIntensity)
-                .ignoresSafeArea()
-
-            aspectRatioGuide
+            .padding(.horizontal, 18)
+            .padding(.top, 6)
+            .padding(.bottom, 14)
 
             VStack {
-                topBar
                 Spacer()
                 feedbackToast
-                featureModeStrip
-                aiCoachPanel
-                featurePanel
-                controls
+                    .padding(.bottom, 170)
             }
-            .padding()
+            .padding(.horizontal, 18)
         }
-        .background(Color.black)
         .task {
             camera.setSelectedFilter(PhotoFilter.filter(for: settings.selectedFilterID))
             await camera.requestAccessAndStart()
@@ -65,18 +59,220 @@ struct CameraView: View {
         HStack {
             statusPill
             Spacer()
+            Text(settings.isUsingHermesCameraBrain ? "Hermes" : "AI")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white.opacity(0.72))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(.white.opacity(0.10), in: Capsule())
+        }
+    }
+
+    private var cameraStage: some View {
+        ZStack {
+            cameraSurface
+
+            OverlayView(result: camera.compositionResult, intensity: settings.overlayIntensity)
+
+            stageAspectRatioGuide
+
+            VStack(spacing: 0) {
+                stageTopOverlay
+                Spacer()
+                zoomStrip
+                    .padding(.bottom, 18)
+            }
+            .padding(16)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: min(UIScreen.main.bounds.height * 0.58, 560))
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.45), radius: 18, x: 0, y: 10)
+    }
+
+    @ViewBuilder
+    private var cameraSurface: some View {
+        if settings.selectedFilterID == PhotoFilter.fallback.id {
+            CameraPreviewView(session: camera.session)
+        } else {
+            FilteredCameraPreviewView(image: camera.filteredPreviewImage ?? camera.latestImage)
+        }
+    }
+
+    private var stageTopOverlay: some View {
+        HStack(alignment: .top) {
+            Button {
+                settings.overlayIntensity = settings.overlayIntensity == .minimal ? .normal : .minimal
+                buttonFeedback(settings.overlayIntensity == .minimal ? "已隐藏辅助线" : "已显示辅助线")
+            } label: {
+                Image(systemName: settings.overlayIntensity == .minimal ? "eye.slash" : "grid")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background(.black.opacity(0.34), in: Circle())
+            }
+            .buttonStyle(PressableButtonStyle())
+
+            Spacer()
+
+            Text(stageHintText)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(maxWidth: 220)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(.black.opacity(0.42), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(.white.opacity(0.22), lineWidth: 1)
+                }
+
+            Spacer()
+
             Button {
                 buttonFeedback("打开设置")
                 showingSettings = true
             } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 20, weight: .semibold))
+                Image(systemName: "gearshape")
+                    .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(.black.opacity(0.35), in: Circle())
+                    .frame(width: 42, height: 42)
+                    .background(.black.opacity(0.34), in: Circle())
             }
             .buttonStyle(PressableButtonStyle())
         }
+    }
+
+    private var zoomStrip: some View {
+        HStack(spacing: 0) {
+            ForEach([".5x", "1x", "2x", "4x", "8x"], id: \.self) { zoom in
+                Text(zoom)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(zoom == "1x" ? .black : .white)
+                    .frame(width: 54, height: 40)
+                    .background {
+                        if zoom == "1x" {
+                            Circle().fill(.white.opacity(0.94))
+                        }
+                    }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(.black.opacity(0.30), in: Capsule())
+    }
+
+    private var lowerChrome: some View {
+        VStack(spacing: 18) {
+            modeBar
+            compactCoachBar
+
+            if isToolPanelExpanded {
+                ScrollView(.vertical, showsIndicators: false) {
+                    featurePanel
+                }
+                .frame(maxHeight: 230)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            controls
+        }
+    }
+
+    private var modeBar: some View {
+        HStack(spacing: 18) {
+            Button {
+                isToolPanelExpanded.toggle()
+                buttonFeedback(isToolPanelExpanded ? "打开工具" : "收起工具")
+            } label: {
+                Image(systemName: isToolPanelExpanded ? "chevron.down.circle" : "slider.horizontal.3")
+                    .font(.system(size: 27, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 48, height: 44)
+            }
+            .buttonStyle(PressableButtonStyle())
+
+            Spacer()
+
+            Button {
+                settings.selectedCameraMode = .aiComposition
+                isToolPanelExpanded.toggle()
+                buttonFeedback(isToolPanelExpanded ? "打开构图工具" : "收起构图工具")
+            } label: {
+                Image(systemName: "viewfinder")
+                    .font(.system(size: 27, weight: .semibold))
+                    .foregroundStyle(settings.selectedCameraMode == .aiComposition ? .cyan : .white)
+                    .frame(width: 48, height: 44)
+            }
+            .buttonStyle(PressableButtonStyle())
+
+            Spacer()
+
+            Button {
+                cycleAspectRatio()
+            } label: {
+                VStack(spacing: 2) {
+                    Image(systemName: "rectangle.portrait")
+                        .font(.system(size: 22, weight: .semibold))
+                    Text(settings.selectedAspectRatio.title)
+                        .font(.caption2.weight(.bold))
+                }
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 44)
+            }
+            .buttonStyle(PressableButtonStyle())
+        }
+        .padding(.horizontal, 34)
+    }
+
+    private var compactCoachBar: some View {
+        HStack(spacing: 12) {
+            Image(systemName: aiCoachIcon)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.black)
+                .frame(width: 34, height: 34)
+                .background(.white.opacity(0.94), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(aiCoachTitle)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.58))
+                Text(aiCoachMessage)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+            }
+
+            Spacer(minLength: 8)
+
+            if gptAdvisor.isAnalyzing {
+                ProgressView()
+                    .tint(.white)
+            } else if let recommendedFilter {
+                Button {
+                    buttonFeedback("已切换到 AI 推荐滤镜")
+                    settings.selectedFilterID = recommendedFilter.id
+                } label: {
+                    Text(recommendedFilter.title)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(.white.opacity(0.9), in: Capsule())
+                }
+                .buttonStyle(PressableButtonStyle())
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     @ViewBuilder
@@ -136,6 +332,38 @@ struct CameraView: View {
             }
             .allowsHitTesting(false)
             .ignoresSafeArea()
+        }
+    }
+
+    @ViewBuilder
+    private var stageAspectRatioGuide: some View {
+        if let ratio = settings.selectedAspectRatio.numericRatio {
+            GeometryReader { geometry in
+                let availableWidth = max(80, geometry.size.width - 20)
+                let availableHeight = max(120, geometry.size.height - 20)
+                let width = min(availableWidth, availableHeight * ratio)
+                let height = width / max(ratio, 0.01)
+
+                ZStack {
+                    Rectangle()
+                        .fill(.black.opacity(0.16))
+                        .mask {
+                            Rectangle()
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                        .frame(width: width, height: height)
+                                        .blendMode(.destinationOut)
+                                }
+                        }
+                        .compositingGroup()
+
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(.white.opacity(0.48), lineWidth: 1.2)
+                        .frame(width: width, height: height)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .allowsHitTesting(false)
         }
     }
 
@@ -267,7 +495,7 @@ struct CameraView: View {
                 Button {
                     triggerManualGPT()
                 } label: {
-                    Label("GPT 识别取景", systemImage: "sparkles")
+                    Label("AI 识别取景", systemImage: "sparkles")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
@@ -596,6 +824,13 @@ struct CameraView: View {
         return PhotoFilter.all.first { $0.id == id }
     }
 
+    private var stageHintText: String {
+        if gptAdvisor.isAnalyzing { return "正在识别取景" }
+        if let advice = gptAdvisor.advice, !advice.isEmpty { return advice }
+        if let suggestion = camera.compositionResult?.topSuggestion { return suggestion }
+        return "对准主体后按 AI"
+    }
+
     private var aiCoachIcon: String {
         if gptAdvisor.isAnalyzing { return "eye" }
         if gptAdvisor.errorMessage != nil { return "exclamationmark.triangle" }
@@ -605,9 +840,9 @@ struct CameraView: View {
     }
 
     private var aiCoachTitle: String {
-        if gptAdvisor.isAnalyzing { return "GPT 正在识别取景" }
+        if gptAdvisor.isAnalyzing { return "AI 正在识别取景" }
         if gptAdvisor.errorMessage != nil { return "AI 构图未就绪" }
-        if gptAdvisor.advice != nil { return "GPT 构图建议" }
+        if gptAdvisor.advice != nil { return settings.isUsingHermesCameraBrain ? "Hermes 构图建议" : "AI 构图建议" }
         if camera.photoStatusText != nil { return "拍摄结果" }
         return "实时构图提示"
     }
@@ -669,6 +904,16 @@ struct CameraView: View {
 
     private func aspectRatioBackground(_ ratio: ShootingAspectRatio) -> AnyShapeStyle {
         settings.selectedAspectRatio == ratio ? AnyShapeStyle(.white.opacity(0.92)) : AnyShapeStyle(.white.opacity(0.12))
+    }
+
+    private func cycleAspectRatio() {
+        let ratios = ShootingAspectRatio.allCases
+        guard let index = ratios.firstIndex(of: settings.selectedAspectRatio) else {
+            settings.selectedAspectRatio = .full
+            return
+        }
+        settings.selectedAspectRatio = ratios[(index + 1) % ratios.count]
+        buttonFeedback("取景比例 \(settings.selectedAspectRatio.title)")
     }
 
     private func buttonFeedback(_ message: String) {
