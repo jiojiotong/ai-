@@ -3,6 +3,9 @@ import CoreGraphics
 import Foundation
 
 final class SettingsStore: ObservableObject {
+    static let hermesCameraBaseURL = "https://api.anyther.top/hermes-ai-camera/v1"
+    static let hermesCameraModel = "ai-camera-agent"
+
     @Published var gptMode: GPTMode {
         didSet { UserDefaults.standard.set(gptMode.rawValue, forKey: Keys.gptMode) }
     }
@@ -62,6 +65,19 @@ final class SettingsStore: ObservableObject {
         selectedFilterCategory = FilterCategory(rawValue: defaults.string(forKey: Keys.selectedFilterCategory) ?? "portrait") ?? .portrait
         selectedPortraitEnhancementID = defaults.string(forKey: Keys.selectedPortraitEnhancementID) ?? PortraitEnhancement.natural.id
         selectedAspectRatio = ShootingAspectRatio(rawValue: defaults.string(forKey: Keys.selectedAspectRatio) ?? "full") ?? .full
+    }
+
+    func useHermesCameraBrain() {
+        apiBaseURL = Self.hermesCameraBaseURL
+        model = Self.hermesCameraModel
+        if gptMode == .off {
+            gptMode = .manual
+        }
+    }
+
+    var isUsingHermesCameraBrain: Bool {
+        apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines) == Self.hermesCameraBaseURL &&
+        model.trimmingCharacters(in: .whitespacesAndNewlines) == Self.hermesCameraModel
     }
 }
 

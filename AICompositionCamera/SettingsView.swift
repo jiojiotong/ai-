@@ -35,6 +35,24 @@ struct SettingsView: View {
                         .autocorrectionDisabled()
                 }
 
+                Section("AI 大脑") {
+                    Button {
+                        settings.useHermesCameraBrain()
+                    } label: {
+                        Label(
+                            settings.isUsingHermesCameraBrain ? "已使用 Hermes 相机大脑" : "使用 Hermes 相机大脑",
+                            systemImage: settings.isUsingHermesCameraBrain ? "checkmark.seal.fill" : "brain.head.profile"
+                        )
+                    }
+
+                    LabeledContent("地址", value: SettingsStore.hermesCameraBaseURL)
+                    LabeledContent("模型", value: SettingsStore.hermesCameraModel)
+
+                    Text("Hermes 相机大脑部署在你的服务器上，兼容 OpenAI Chat Completions，并使用 ai-camera-agent 资料库生成构图动作和滤镜推荐。API Key 不会写入源码，需要在上方字段中填写后保存到本机 Keychain。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("构图辅助") {
                     Picker("叠加层", selection: $settings.overlayIntensity) {
                         ForEach(OverlayIntensity.allCases) { intensity in
@@ -78,13 +96,13 @@ struct SettingsView: View {
                 }
 
                 Section("隐私") {
-                    Text("端侧实时构图、滤镜分类和轻美颜不会上传画面。开启 GPT 分析后，应用会把当前取景帧压缩后发送到你配置的 GPT 接口或中转站，用于生成构图建议和滤镜推荐。")
+                    Text("端侧实时构图、滤镜分类和轻美颜不会上传画面。开启 GPT/Hermes 分析后，应用会把当前取景帧压缩后发送到你配置的 AI 大脑接口，用于生成构图建议和滤镜推荐。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
                 Section("说明") {
-                    Text("AI 构图模式会把当前取景帧发送给你配置的 GPT 接口，让 GPT 像取景器教练一样返回可执行的移动、靠近、留白和角度建议。")
+                    Text("AI 构图模式会把当前取景帧发送给你配置的 GPT 或 Hermes 接口，让 AI 像取景器教练一样返回可执行的移动、靠近、留白和角度建议。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
