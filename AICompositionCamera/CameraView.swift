@@ -7,7 +7,6 @@ struct CameraView: View {
     @StateObject private var hermesAdvisor = HermesCompositionAdvisor()
     @State private var showingSettings = false
     @State private var lastAutomaticAnalysis = Date.distantPast
-    @State private var lastAutomaticSceneSignature = ""
     @State private var automaticRequestDates: [Date] = []
     @State private var feedbackMessage: String?
     @State private var feedbackTask: Task<Void, Never>?
@@ -528,7 +527,7 @@ struct CameraView: View {
                 Button {
                     triggerManualHermes()
                 } label: {
-                    Label("Hermes 取景", systemImage: "sparkles")
+                    Label("Hermes 识别", systemImage: "sparkles")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
@@ -740,7 +739,7 @@ struct CameraView: View {
                 VStack(spacing: 6) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 24, weight: .bold))
-                    Text("指导")
+                    Text("识别")
                         .font(.caption.weight(.semibold))
                 }
                 .foregroundStyle(.white)
@@ -841,11 +840,7 @@ struct CameraView: View {
         guard Date().timeIntervalSince(lastAutomaticAnalysis) >= settings.automaticHermesInterval else { return }
         guard hasAutomaticHermesBudget() else { return }
 
-        let signature = camera.compositionResult?.sceneSignature ?? "no-result"
-        guard signature != lastAutomaticSceneSignature else { return }
-
         lastAutomaticAnalysis = Date()
-        lastAutomaticSceneSignature = signature
         automaticRequestDates.append(Date())
         camera.photoStatusText = nil
         Task {
@@ -869,12 +864,16 @@ struct CameraView: View {
     }
 
     private var activeCaptureGuidance: CaptureGuidance? {
-        if camera.compositionResult?.primarySubject == nil {
-            return normalizedGuidance(camera.compositionResult?.liveGuidance)
+        if let hermesGuidance = hermesAdvisor.captureGuidance {
+            return normalizedGuidance(hermesGuidance)
         }
 
-        let guidance = hermesAdvisor.captureGuidance ?? camera.compositionResult?.liveGuidance
-        return normalizedGuidance(guidance)
+        let localGuidance = normalizedGuidance(camera.compositionResult?.liveGuidance)
+        if localGuidance?.direction == .hold, hermesAdvisor.advice != nil {
+            return nil
+        }
+
+        return localGuidance
     }
 
     private var stageHintText: String {
@@ -901,6 +900,7 @@ struct CameraView: View {
     private var aiCoachTitle: String {
         if hermesAdvisor.isAnalyzing { return "Hermes 正在识别取景" }
         if hermesAdvisor.errorMessage != nil { return "Hermes 暂不可用" }
+        if let subject = hermesAdvisor.recognizedSubject, !subject.isEmpty { return "Hermes 识别：\(subject)" }
         if hermesAdvisor.advice != nil { return "Hermes 取景建议" }
         if camera.photoStatusText != nil { return "拍摄结果" }
         return "实时构图提示"
@@ -908,13 +908,13 @@ struct CameraView: View {
 
     private var aiCoachMessage: String {
         if hermesAdvisor.isAnalyzing { return "保持手机稳定，正在判断主体、留白和角度。" }
+        if let error = hermesAdvisor.errorMessage { return error }
         if let guidance = activeCaptureGuidance {
             if let zoom = guidance.zoomFactor {
                 return "\(guidance.message)，切到 \(zoomLabel(zoom))x 取景。"
             }
             return guidance.message
         }
-        if let error = hermesAdvisor.errorMessage { return error }
         if let advice = hermesAdvisor.advice, !advice.isEmpty { return advice }
         if let photoStatus = camera.photoStatusText { return photoStatus }
         return camera.compositionResult?.topSuggestion ?? "对准主体后让 Hermes 指导取景。"

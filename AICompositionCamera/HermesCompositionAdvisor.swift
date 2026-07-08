@@ -7,6 +7,7 @@ final class HermesCompositionAdvisor: ObservableObject {
     @Published var isAnalyzing = false
     @Published var advice: String?
     @Published var captureGuidance: CaptureGuidance?
+    @Published var recognizedSubject: String?
     @Published var recommendedFilterID: String?
     @Published var filterReason: String?
     @Published var errorMessage: String?
@@ -17,6 +18,7 @@ final class HermesCompositionAdvisor: ObservableObject {
         isAnalyzing = false
         advice = nil
         captureGuidance = nil
+        recognizedSubject = nil
         recommendedFilterID = nil
         filterReason = nil
         errorMessage = nil
@@ -39,6 +41,7 @@ final class HermesCompositionAdvisor: ObservableObject {
         isAnalyzing = true
         advice = nil
         captureGuidance = nil
+        recognizedSubject = nil
         recommendedFilterID = nil
         filterReason = nil
         errorMessage = nil
@@ -56,6 +59,7 @@ final class HermesCompositionAdvisor: ObservableObject {
             guard activeRequestID == requestID else { return }
             advice = parsed.advice
             captureGuidance = parsed.guidance
+            recognizedSubject = parsed.subject
             recommendedFilterID = parsed.filterID
             filterReason = parsed.filterReason
         } catch {
@@ -105,9 +109,14 @@ final class HermesCompositionAdvisor: ObservableObject {
         let imageURL = "data:image/jpeg;base64,\(jpegData.base64EncodedString())"
         let prompt = """
         你是一个实时取景构图教练，目标是像相机取景器提示一样直接指导用户移动手机或调整主体，然后从滤镜库里选出最适合当前画面的滤镜。
-        请先判断构图，再判断滤镜。只根据当前取景画面给拍摄前动作，不做照片点评，不说后期修图，不泛泛夸奖。
+        请先识别用户正在拍的主体，再判断构图和滤镜。只根据当前取景画面给拍摄前动作，不做照片点评，不说后期修图，不泛泛夸奖。
+        重要：不要默认回复“可以拍”。除非主体位置、边缘留白、水平线、曝光和拍摄距离都明显稳定，否则必须给一个最小可执行微调动作。
+        如果画面变化了，即使本地端侧检测结果相似，也要重新观察当前帧并给当前帧建议。
         优先判断：主体是否明显、主体位置、人物头顶留白、身体裁切、水平线、前景遮挡、拍摄距离、镜头高低、左右移动方向。
         动作必须直接告诉用户移动相机或调整倍率，不要写抽象点评。每条不超过 12 个中文字符。
+        如果主体不是明显居中，或左右/上下留白不均衡，不要返回 hold。hold 只用于主体清晰、位置舒服、边缘不贴边、画面已经适合按快门。
+        如果当前帧无法可靠判断，也不要假装可以拍；动作写“重新取景”，移动填 hold，原因写“画面主体不明确”。
+        对矿泉水瓶、杯子、鼠标、食物、摆件等小物体，优先让主体放到画面中心或略低于中心，并明确说相机往哪移或切几倍。
         移动字段只能填：left、right、up、down、closer、farther、hold。它表示“相机/手机应该往哪里动”，不是主体往哪里动。
         变焦字段只能填数字倍率：0.5、1、1.5、2、3、4、8。没有必要变焦就填 1。
         滤镜必须从可选滤镜里选 1 个，必须返回 filterId，不要返回滤镜中文名。
@@ -115,7 +124,8 @@ final class HermesCompositionAdvisor: ObservableObject {
         本地端侧检测结果：\(localContext)
         可选滤镜：
         \(PhotoFilter.hermesCatalog)
-        输出格式必须严格使用五行：
+        输出格式必须严格使用六行：
+        主体：矿泉水瓶/鼠标/人脸/人物/杯子/未识别主体
         动作：...
         移动：left/right/up/down/closer/farther/hold
         变焦：数字倍率
@@ -186,8 +196,9 @@ final class HermesCompositionAdvisor: ObservableObject {
     private func parseResponse(
         _ response: String,
         localResult: CompositionResult?
-    ) -> (advice: String, guidance: CaptureGuidance?, filterID: String?, filterReason: String?) {
+    ) -> (advice: String, subject: String?, guidance: CaptureGuidance?, filterID: String?, filterReason: String?) {
         var advice = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        var subject: String?
         var direction: CameraMoveDirection?
         var zoomFactor: CGFloat?
         var filterID: String?
@@ -195,7 +206,11 @@ final class HermesCompositionAdvisor: ObservableObject {
 
         for line in response.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.hasPrefix("动作：") {
+            if trimmed.hasPrefix("主体：") {
+                subject = String(trimmed.dropFirst("主体：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else if trimmed.hasPrefix("识别：") {
+                subject = String(trimmed.dropFirst("识别：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else if trimmed.hasPrefix("动作：") {
                 advice = String(trimmed.dropFirst("动作：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
             } else if trimmed.hasPrefix("建议：") {
                 advice = String(trimmed.dropFirst("建议：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -225,13 +240,23 @@ final class HermesCompositionAdvisor: ObservableObject {
             direction = inferDirection(from: advice)
         }
 
+        let corrected = correctedGuidance(
+            direction: direction,
+            zoomFactor: zoomFactor,
+            advice: advice,
+            localResult: localResult
+        )
+        direction = corrected.direction
+        zoomFactor = corrected.zoomFactor
+        advice = corrected.advice
+
         let meaningfulZoom = zoomFactor.flatMap { abs($0 - 1) < 0.05 ? nil : $0 }
         let guidance: CaptureGuidance?
         if direction != nil || meaningfulZoom != nil {
             guidance = CaptureGuidance(
                 direction: direction,
                 zoomFactor: meaningfulZoom,
-                message: advice,
+                message: displayMessage(subject: subject, advice: advice, direction: direction),
                 targetRect: localResult?.liveGuidance.targetRect ?? localResult?.primarySubject?.rect,
                 source: .ai,
                 priority: 100
@@ -240,7 +265,56 @@ final class HermesCompositionAdvisor: ObservableObject {
             guidance = nil
         }
 
-        return (advice, guidance, filterID, filterReason)
+        return (advice, sanitizedSubject(subject), guidance, filterID, filterReason)
+    }
+
+    private func correctedGuidance(
+        direction: CameraMoveDirection?,
+        zoomFactor: CGFloat?,
+        advice: String,
+        localResult: CompositionResult?
+    ) -> (direction: CameraMoveDirection?, zoomFactor: CGFloat?, advice: String) {
+        guard let localGuidance = localResult?.liveGuidance else {
+            return (direction, zoomFactor, advice)
+        }
+
+        let localDirection = localGuidance.direction
+        let localIsAction = localDirection != nil && localDirection != .hold
+        let aiSaysHold = direction == .hold || (direction == nil && zoomFactor == nil)
+
+        guard aiSaysHold, localIsAction else {
+            return (direction, zoomFactor, advice)
+        }
+
+        return (
+            localDirection,
+            localGuidance.zoomFactor ?? zoomFactor,
+            localGuidance.message
+        )
+    }
+
+    private func displayMessage(subject: String?, advice: String, direction: CameraMoveDirection?) -> String {
+        let cleanSubject = sanitizedSubject(subject)
+        let cleanAdvice = advice.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let cleanSubject, !cleanAdvice.contains(cleanSubject) else {
+            return cleanAdvice
+        }
+
+        if direction == .hold {
+            return "识别：\(cleanSubject)，\(cleanAdvice.isEmpty ? "可以拍" : cleanAdvice)"
+        }
+
+        return "识别：\(cleanSubject)，\(cleanAdvice)"
+    }
+
+    private func sanitizedSubject(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let cleaned = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "。", with: "")
+        guard !cleaned.isEmpty, cleaned != "未识别主体" else { return nil }
+        return String(cleaned.prefix(18))
     }
 
     private func parseDirection(_ value: String) -> CameraMoveDirection? {
