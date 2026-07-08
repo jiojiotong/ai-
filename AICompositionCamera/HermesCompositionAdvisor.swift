@@ -10,7 +10,6 @@ final class HermesCompositionAdvisor: ObservableObject {
     @Published var recommendedFilterID: String?
     @Published var filterReason: String?
     @Published var errorMessage: String?
-    @Published private(set) var lastFailureDate: Date?
     private var activeRequestID = UUID()
 
     func reset() {
@@ -21,18 +20,13 @@ final class HermesCompositionAdvisor: ObservableObject {
         recommendedFilterID = nil
         filterReason = nil
         errorMessage = nil
-        lastFailureDate = nil
-    }
-
-    func shouldThrottleAutomaticAnalysis(cooldown: TimeInterval) -> Bool {
-        guard let lastFailureDate else { return false }
-        return Date().timeIntervalSince(lastFailureDate) < cooldown
     }
 
     func analyze(image: UIImage?, localResult: CompositionResult?, settings: SettingsStore) async {
         guard settings.hermesMode != .off else { return }
-        guard !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "请先在设置里填写 Hermes API Key。"
+        let apiKey = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard settings.usesHermesPublicGateway || !apiKey.isEmpty else {
+            errorMessage = "当前私有网关需要 API Key。"
             return
         }
         guard let image, let jpegData = compressedJPEG(from: image) else {
@@ -54,7 +48,7 @@ final class HermesCompositionAdvisor: ObservableObject {
                 jpegData: jpegData,
                 localContext: localResult?.hermesContext ?? "No local context.",
                 aspectRatioTitle: settings.selectedAspectRatio.title,
-                apiKey: settings.apiKey,
+                apiKey: apiKey,
                 apiBaseURL: settings.apiBaseURL,
                 model: settings.model
             )
@@ -64,11 +58,9 @@ final class HermesCompositionAdvisor: ObservableObject {
             captureGuidance = parsed.guidance
             recommendedFilterID = parsed.filterID
             filterReason = parsed.filterReason
-            lastFailureDate = nil
         } catch {
             guard activeRequestID == requestID else { return }
             captureGuidance = nil
-            lastFailureDate = Date()
             errorMessage = friendlyErrorMessage(for: error)
         }
 
@@ -104,7 +96,9 @@ final class HermesCompositionAdvisor: ObservableObject {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        if !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 18
 

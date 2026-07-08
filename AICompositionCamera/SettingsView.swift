@@ -21,7 +21,7 @@ struct SettingsView: View {
                         Text("30 秒").tag(TimeInterval(30))
                     }
 
-                    TextField("Hermes API Key", text: $settings.apiKey)
+                    TextField("私有网关 API Key（可不填）", text: $settings.apiKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
@@ -48,7 +48,7 @@ struct SettingsView: View {
                     LabeledContent("地址", value: SettingsStore.hermesCameraBaseURL)
                     LabeledContent("模型", value: SettingsStore.hermesCameraModel)
 
-                    Text("Hermes 相机大脑部署在你的服务器上，使用 ai-camera-agent 资料库生成取景动作、变焦建议和滤镜推荐。API Key 不会写入源码，只保存到本机 Keychain。")
+                    Text("Hermes 相机大脑部署在你的服务器上，使用 ai-camera-agent 资料库生成取景动作、变焦建议和滤镜推荐。默认网关已在服务器侧鉴权，只有切到私有网关时才需要填写 API Key。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

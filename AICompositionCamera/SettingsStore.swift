@@ -58,8 +58,7 @@ final class SettingsStore: ObservableObject {
         automaticHermesInterval = defaults.object(forKey: Keys.automaticHermesInterval) as? TimeInterval ?? 5
         overlayIntensity = OverlayIntensity(rawValue: defaults.string(forKey: Keys.overlayIntensity) ?? "normal") ?? .normal
         let hermesKey = KeychainStore.read(service: Keys.keychainService, account: Keys.apiKey)
-        let legacyKey = KeychainStore.read(service: Keys.keychainService, account: LegacyKeys.apiKey)
-        apiKey = hermesKey.isEmpty ? legacyKey : hermesKey
+        apiKey = hermesKey
         let storedModel = defaults.string(forKey: Keys.model) ?? defaults.string(forKey: LegacyKeys.model)
         model = storedModel == nil || storedModel == "gpt-4o" ? Self.hermesCameraModel : storedModel ?? Self.hermesCameraModel
         let storedBaseURL = defaults.string(forKey: Keys.apiBaseURL) ?? defaults.string(forKey: LegacyKeys.apiBaseURL)
@@ -88,6 +87,13 @@ final class SettingsStore: ObservableObject {
     var isUsingHermesCameraBrain: Bool {
         apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines) == Self.hermesCameraBaseURL &&
         model.trimmingCharacters(in: .whitespacesAndNewlines) == Self.hermesCameraModel
+    }
+
+    var usesHermesPublicGateway: Bool {
+        let normalized = apiBaseURL
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return normalized == Self.hermesCameraBaseURL || normalized.contains("api.anyther.top/hermes-ai-camera")
     }
 }
 

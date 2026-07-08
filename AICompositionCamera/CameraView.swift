@@ -802,8 +802,8 @@ struct CameraView: View {
             buttonFeedback("Hermes 正在取景")
             return
         }
-        guard !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            buttonFeedback("请先填写 API Key")
+        guard settings.usesHermesPublicGateway || !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            buttonFeedback("私有网关需要 API Key")
             return
         }
         guard camera.latestImage != nil else {
@@ -835,8 +835,7 @@ struct CameraView: View {
     private func triggerAutomaticHermesIfNeeded() {
         guard settings.hermesMode.allowsAutomatic else { return }
         guard !hermesAdvisor.isAnalyzing else { return }
-        guard !hermesAdvisor.shouldThrottleAutomaticAnalysis(cooldown: 45) else { return }
-        guard !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard settings.usesHermesPublicGateway || !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard camera.isFrameStable else { return }
         guard camera.latestImage != nil else { return }
         guard Date().timeIntervalSince(lastAutomaticAnalysis) >= settings.automaticHermesInterval else { return }
