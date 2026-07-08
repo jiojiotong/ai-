@@ -266,60 +266,118 @@ struct CameraView: View {
     }
 
     private var compactCoachBar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: aiCoachIcon)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(.black)
-                .frame(width: 34, height: 34)
-                .background(.white.opacity(0.94), in: Circle())
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: aiCoachIcon)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(width: 34, height: 34)
+                    .background(.white.opacity(0.94), in: Circle())
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(aiCoachTitle)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.58))
-                Text(aiCoachMessage)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.82)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(aiCoachTitle)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.58))
+                    Text(aiCoachMessage)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.82)
+                }
+
+                Spacer(minLength: 8)
+
+                if hermesAdvisor.isAnalyzing {
+                    ProgressView()
+                        .tint(.white)
+                } else if hasHermesResult {
+                    Button {
+                        clearHermesSession()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .frame(width: 34, height: 34)
+                    }
+                    .buttonStyle(PressableButtonStyle(scale: 0.9))
+                    .accessibilityLabel("退出 Hermes 识别")
+                }
             }
 
-            Spacer(minLength: 8)
+            HStack(spacing: 8) {
+                directorChip(title: "主体", value: directorSubjectText, systemImage: "viewfinder")
+                directorChip(title: "动作", value: directorMoveText, systemImage: "location.fill")
+                directorChip(title: "倍率", value: directorZoomText, systemImage: "scope")
+            }
 
-            if hermesAdvisor.isAnalyzing {
-                ProgressView()
-                    .tint(.white)
-            } else if let recommendedFilter {
+            HStack(spacing: 10) {
                 Button {
-                    buttonFeedback("已切换到 Hermes 推荐滤镜")
-                    settings.selectedFilterID = recommendedFilter.id
+                    triggerManualHermes()
                 } label: {
-                    Text(recommendedFilter.title)
+                    Label(hasHermesResult ? "重新识别" : "识别当前画面", systemImage: "sparkles")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.black)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(.white.opacity(0.9), in: Capsule())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(PressableButtonStyle())
-            }
 
-            if hasHermesResult {
-                Button {
-                    clearHermesSession()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.92))
-                        .frame(width: 34, height: 34)
+                if let recommendedFilter {
+                    Button {
+                        buttonFeedback("已切换到 Hermes 推荐滤镜")
+                        settings.selectedFilterID = recommendedFilter.id
+                    } label: {
+                        Label(recommendedFilter.title, systemImage: "camera.filters")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.76)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(PressableButtonStyle())
+                } else if hasHermesResult {
+                    Button {
+                        clearHermesSession()
+                    } label: {
+                        Label("退出", systemImage: "xmark.circle.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(PressableButtonStyle())
                 }
-                .buttonStyle(PressableButtonStyle(scale: 0.9))
-                .accessibilityLabel("退出 Hermes 识别")
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func directorChip(title: String, value: String, systemImage: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.white.opacity(0.66))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.48))
+                Text(value)
+                    .font(.caption.weight(.heavy))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .background(.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     @ViewBuilder
@@ -896,6 +954,36 @@ struct CameraView: View {
         return PhotoFilter.all.first { $0.id == id }
     }
 
+    private var directorSubjectText: String {
+        if hermesAdvisor.isAnalyzing { return "识别中" }
+        if let subject = hermesAdvisor.recognizedSubject, !subject.isEmpty { return subject }
+        if camera.compositionResult?.primarySubject != nil { return subjectStateText }
+        return "待识别"
+    }
+
+    private var directorMoveText: String {
+        if hermesAdvisor.isAnalyzing { return "分析中" }
+        if hermesAdvisor.errorMessage != nil { return "本地指导" }
+        guard let guidance = activeCaptureGuidance else { return "等待主体" }
+        if let direction = guidance.direction {
+            return guidance.message.isEmpty ? direction.title : guidance.message
+        }
+        if guidance.zoomFactor != nil {
+            return guidance.message.isEmpty ? "调整倍率" : guidance.message
+        }
+        return "继续取景"
+    }
+
+    private var directorZoomText: String {
+        if let zoom = normalizedGuidance(hermesAdvisor.captureGuidance)?.zoomFactor {
+            return "\(zoomLabel(zoom))x"
+        }
+        if let zoom = normalizedGuidance(camera.compositionResult?.liveGuidance)?.zoomFactor {
+            return "\(zoomLabel(zoom))x"
+        }
+        return "\(zoomLabel(camera.zoomFactor))x"
+    }
+
     private var hasHermesResult: Bool {
         hermesAdvisor.advice != nil ||
         hermesAdvisor.captureGuidance != nil ||
@@ -942,7 +1030,7 @@ struct CameraView: View {
         if hermesAdvisor.errorMessage != nil { return "exclamationmark.triangle" }
         if hermesAdvisor.advice != nil { return "sparkles" }
         if camera.photoStatusText != nil { return "photo" }
-        return "viewfinder"
+        return "sparkles"
     }
 
     private var aiCoachTitle: String {
@@ -951,7 +1039,7 @@ struct CameraView: View {
         if let subject = hermesAdvisor.recognizedSubject, !subject.isEmpty { return "Hermes 识别：\(subject)" }
         if hermesAdvisor.advice != nil { return "Hermes 取景建议" }
         if camera.photoStatusText != nil { return "拍摄结果" }
-        return "实时构图提示"
+        return "Hermes 待识别"
     }
 
     private var aiCoachMessage: String {
@@ -971,7 +1059,10 @@ struct CameraView: View {
             return guidance.message
         }
         if let photoStatus = camera.photoStatusText { return photoStatus }
-        return camera.compositionResult?.topSuggestion ?? "对准主体后让 Hermes 指导取景。"
+        if let guidance = activeCaptureGuidance, guidance.message != "可以拍" {
+            return "本地预判：\(guidance.message)。点识别让 Hermes 接管。"
+        }
+        return "点识别，让 Hermes 判断主体、位置和倍率。"
     }
 
     private var subjectStateText: String {
