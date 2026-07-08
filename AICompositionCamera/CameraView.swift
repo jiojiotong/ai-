@@ -14,6 +14,8 @@ struct CameraView: View {
     @State private var isToolPanelExpanded = false
     @State private var focusIndicatorPoint: CGPoint?
     @State private var focusIndicatorTask: Task<Void, Never>?
+    @State private var lastAppliedHermesZoom: CGFloat?
+    @State private var lastAppliedHermesZoomDate = Date.distantPast
 
     var body: some View {
         ZStack {
@@ -46,6 +48,9 @@ struct CameraView: View {
             guard let newValue, PhotoFilter.all.contains(where: { $0.id == newValue }) else { return }
             settings.selectedFilterID = newValue
         }
+        .onChange(of: hermesAdvisor.captureGuidance) { newValue in
+            applyHermesZoomIfNeeded(newValue)
+        }
         .onDisappear {
             camera.stop()
         }
@@ -61,7 +66,7 @@ struct CameraView: View {
         HStack {
             statusPill
             Spacer()
-            Text(settings.isUsingHermesCameraBrain ? "Hermes" : "AI")
+            Text("Hermes")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.white.opacity(0.72))
                 .padding(.horizontal, 12)
@@ -316,7 +321,7 @@ struct CameraView: View {
                     .tint(.white)
             } else if let recommendedFilter {
                 Button {
-                    buttonFeedback("已切换到 AI 推荐滤镜")
+                    buttonFeedback("已切换到 Hermes 推荐滤镜")
                     settings.selectedFilterID = recommendedFilter.id
                 } label: {
                     Text(recommendedFilter.title)
@@ -523,7 +528,7 @@ struct CameraView: View {
 
             if let recommendedFilter {
                 Button {
-                    buttonFeedback("已切换到 AI 推荐滤镜")
+                    buttonFeedback("已切换到 Hermes 推荐滤镜")
                     settings.selectedFilterID = recommendedFilter.id
                 } label: {
                     Label("\(recommendedFilterPrefix) \(recommendedFilter.title)\(filterReasonSuffix)", systemImage: "camera.filters")
@@ -554,7 +559,7 @@ struct CameraView: View {
                 Button {
                     triggerManualHermes()
                 } label: {
-                    Label("AI 识别取景", systemImage: "sparkles")
+                    Label("Hermes 取景", systemImage: "sparkles")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
@@ -777,16 +782,23 @@ struct CameraView: View {
             .buttonStyle(PressableButtonStyle())
 
             Button {
-                buttonFeedback("正在拍照")
+                buttonFeedback(isCaptureReady ? "构图就绪，正在拍照" : "正在拍照")
                 camera.capturePhoto(aspectRatio: settings.selectedAspectRatio)
             } label: {
                 Circle()
-                    .strokeBorder(.white, lineWidth: 5)
+                    .strokeBorder(isCaptureReady ? Color.green.opacity(0.95) : Color.white, lineWidth: 5)
                     .frame(width: 76, height: 76)
                     .overlay {
                         Circle()
-                            .fill(.white.opacity(0.85))
+                            .fill(isCaptureReady ? Color.green.opacity(0.9) : Color.white.opacity(0.85))
                             .frame(width: 58, height: 58)
+                    }
+                    .overlay {
+                        if isCaptureReady {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 24, weight: .heavy))
+                                .foregroundStyle(.black)
+                        }
                     }
             }
             .buttonStyle(PressableButtonStyle(scale: 0.92))
@@ -899,7 +911,7 @@ struct CameraView: View {
         }
         if let advice = hermesAdvisor.advice, !advice.isEmpty { return advice }
         if let suggestion = camera.compositionResult?.topSuggestion { return suggestion }
-        return "对准主体后按 AI"
+        return "对准主体后按指导"
     }
 
     private var aiCoachIcon: String {
@@ -911,9 +923,9 @@ struct CameraView: View {
     }
 
     private var aiCoachTitle: String {
-        if hermesAdvisor.isAnalyzing { return "AI 正在识别取景" }
-        if hermesAdvisor.errorMessage != nil { return "AI 构图未就绪" }
-        if hermesAdvisor.advice != nil { return settings.isUsingHermesCameraBrain ? "Hermes 构图建议" : "AI 构图建议" }
+        if hermesAdvisor.isAnalyzing { return "Hermes 正在识别取景" }
+        if hermesAdvisor.errorMessage != nil { return "Hermes 未就绪" }
+        if hermesAdvisor.advice != nil { return "Hermes 取景建议" }
         if camera.photoStatusText != nil { return "拍摄结果" }
         return "实时构图提示"
     }
@@ -949,6 +961,10 @@ struct CameraView: View {
     private var recommendedFilterPrefix: String {
         guard let recommendedFilter else { return "推荐" }
         return settings.selectedFilterID == recommendedFilter.id ? "已套用" : "推荐"
+    }
+
+    private var isCaptureReady: Bool {
+        activeCaptureGuidance?.direction == .hold && camera.isFrameStable && !hermesAdvisor.isAnalyzing
     }
 
     private var portraitHint: String {
@@ -1016,6 +1032,22 @@ struct CameraView: View {
         guidance.zoomFactor = camera.maxZoomFactor
         guidance.message = "切到 \(zoomLabel(camera.maxZoomFactor))x"
         return guidance
+    }
+
+    private func applyHermesZoomIfNeeded(_ guidance: CaptureGuidance?) {
+        guard let guidance = normalizedGuidance(guidance), let zoom = guidance.zoomFactor else { return }
+        guard isZoomSupported(zoom) else { return }
+        guard abs(camera.zoomFactor - zoom) >= 0.08 else { return }
+
+        let recentlyAppliedSameZoom = lastAppliedHermesZoom.map {
+            abs($0 - zoom) < 0.08 && Date().timeIntervalSince(lastAppliedHermesZoomDate) < 8
+        } ?? false
+        guard !recentlyAppliedSameZoom else { return }
+
+        lastAppliedHermesZoom = zoom
+        lastAppliedHermesZoomDate = Date()
+        camera.setZoomFactor(zoom)
+        buttonFeedback("Hermes 已切到 \(zoomLabel(zoom))x")
     }
 
     private func zoomLabel(_ value: CGFloat) -> String {
