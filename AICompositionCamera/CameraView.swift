@@ -8,6 +8,9 @@ struct CameraView: View {
     @State private var showingSettings = false
     @State private var lastAutomaticAnalysis = Date.distantPast
     @State private var automaticRequestDates: [Date] = []
+    @State private var automaticSceneSignature: String?
+    @State private var automaticSceneStableSince = Date()
+    @State private var lastAutomaticSceneSignature: String?
     @State private var feedbackMessage: String?
     @State private var feedbackTask: Task<Void, Never>?
     @State private var focusIndicatorPoint: CGPoint?
@@ -924,14 +927,22 @@ struct CameraView: View {
         guard settings.hermesMode.allowsAutomatic else { return }
         guard !hermesAdvisor.isAnalyzing else { return }
         guard settings.usesHermesPublicGateway || !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        guard camera.isFrameStable else { return }
         guard camera.latestImage != nil else { return }
         guard !hasHermesResult else { return }
-        guard Date().timeIntervalSince(lastAutomaticAnalysis) >= settings.automaticHermesInterval else { return }
+        let now = Date()
+        guard camera.isFrameStable else {
+            resetAutomaticSceneTracking(now: now)
+            return
+        }
+        guard let signature = updateAutomaticSceneTracking(now: now) else { return }
+        guard now.timeIntervalSince(automaticSceneStableSince) >= settings.automaticHermesInterval else { return }
+        guard now.timeIntervalSince(lastAutomaticAnalysis) >= settings.automaticHermesInterval else { return }
+        guard signature != lastAutomaticSceneSignature || now.timeIntervalSince(lastAutomaticAnalysis) >= 30 else { return }
         guard hasAutomaticHermesBudget() else { return }
 
-        lastAutomaticAnalysis = Date()
-        automaticRequestDates.append(Date())
+        lastAutomaticAnalysis = now
+        lastAutomaticSceneSignature = signature
+        automaticRequestDates.append(now)
         beginHermesSession()
         camera.photoStatusText = nil
         Task {
@@ -941,6 +952,33 @@ struct CameraView: View {
                 settings: settings
             )
         }
+    }
+
+    private func updateAutomaticSceneTracking(now: Date) -> String? {
+        guard let signature = currentAutomaticSceneSignature else {
+            resetAutomaticSceneTracking(now: now)
+            return nil
+        }
+
+        if automaticSceneSignature != signature {
+            automaticSceneSignature = signature
+            automaticSceneStableSince = now
+        }
+
+        return signature
+    }
+
+    private func resetAutomaticSceneTracking(now: Date = Date()) {
+        automaticSceneSignature = nil
+        automaticSceneStableSince = now
+    }
+
+    private var currentAutomaticSceneSignature: String? {
+        guard camera.latestImage != nil else { return nil }
+        if let result = camera.compositionResult {
+            return result.sceneSignature
+        }
+        return "whole-frame"
     }
 
     private func hasAutomaticHermesBudget() -> Bool {
@@ -964,6 +1002,9 @@ struct CameraView: View {
     private var directorMoveText: String {
         if hermesAdvisor.isAnalyzing { return "分析中" }
         if hermesAdvisor.errorMessage != nil { return "本地指导" }
+        if !hasHermesResult, settings.hermesMode.allowsAutomatic {
+            return automaticReadinessText
+        }
         guard let guidance = activeCaptureGuidance else { return "等待主体" }
         if let direction = guidance.direction {
             return guidance.message.isEmpty ? direction.title : guidance.message
@@ -982,6 +1023,17 @@ struct CameraView: View {
             return "\(zoomLabel(zoom))x"
         }
         return "\(zoomLabel(camera.zoomFactor))x"
+    }
+
+    private var automaticReadinessText: String {
+        guard camera.latestImage != nil else { return "相机准备中" }
+        guard camera.isFrameStable else { return "稳住画面" }
+        let elapsed = Date().timeIntervalSince(automaticSceneStableSince)
+        let remaining = max(0, settings.automaticHermesInterval - elapsed)
+        if remaining > 0.5 {
+            return "\(Int(ceil(remaining)))秒后识别"
+        }
+        return "即将识别"
     }
 
     private var hasHermesResult: Bool {
@@ -1015,6 +1067,9 @@ struct CameraView: View {
             return guidance.message
         }
         if let advice = hermesAdvisor.advice, !advice.isEmpty { return advice }
+        if settings.hermesMode.allowsAutomatic, !hasHermesResult {
+            return automaticReadinessText
+        }
         if let guidance = activeCaptureGuidance {
             if let zoom = guidance.zoomFactor {
                 return "\(guidance.message) \(zoomLabel(zoom))x"
@@ -1059,6 +1114,9 @@ struct CameraView: View {
             return guidance.message
         }
         if let photoStatus = camera.photoStatusText { return photoStatus }
+        if settings.hermesMode.allowsAutomatic {
+            return "稳住画面 5 秒，Hermes 会自动识别并接管取景。"
+        }
         if let guidance = activeCaptureGuidance, guidance.message != "可以拍" {
             return "本地预判：\(guidance.message)。点识别让 Hermes 接管。"
         }
@@ -1187,6 +1245,7 @@ struct CameraView: View {
     private func beginHermesSession() {
         zoomBeforeHermes = camera.zoomFactor
         filterBeforeHermesID = settings.selectedFilterID
+        resetAutomaticSceneTracking()
         resetHermesZoomMemory()
         hermesAdvisor.reset()
     }
@@ -1209,6 +1268,8 @@ struct CameraView: View {
         zoomBeforeHermes = nil
         filterBeforeHermesID = nil
         lastAutomaticAnalysis = Date()
+        lastAutomaticSceneSignature = currentAutomaticSceneSignature
+        resetAutomaticSceneTracking()
 
         if restoreCamera {
             if let filterToRestore, PhotoFilter.all.contains(where: { $0.id == filterToRestore }) {

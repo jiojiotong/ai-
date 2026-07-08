@@ -42,6 +42,8 @@ final class CameraSessionController: NSObject, ObservableObject {
     private var lastPublishedResult: CompositionResult?
     private var lastSubjectCenter: CGPoint?
     private var stableFrameCount = 0
+    private var lastFrameFingerprint: [Float]?
+    private var stableSceneFrameCount = 0
     private var isSessionConfigured = false
     private var analysisFrameIndex = 0
     private var isPhotoCaptureInProgress = false
@@ -321,7 +323,7 @@ final class CameraSessionController: NSObject, ObservableObject {
             includeSaliency: includeSaliency
         )
         let result = compositionEngine.evaluate(observations: observations)
-        let stable = updateStability(subjectCenter: result.primarySubject?.rect.center)
+        let stable = updateStability(subjectCenter: result.primarySubject?.rect.center, pixelBuffer: pixelBuffer)
         let shouldUpdateImage = now.timeIntervalSince(lastImageUpdateTime) >= 1
         let shouldUpdatePreview = now.timeIntervalSince(lastPreviewUpdateTime) >= 0.12
         let filter = currentFilter()
@@ -346,11 +348,13 @@ final class CameraSessionController: NSObject, ObservableObject {
         }
     }
 
-    private func updateStability(subjectCenter: CGPoint?) -> Bool {
+    private func updateStability(subjectCenter: CGPoint?, pixelBuffer: CVPixelBuffer) -> Bool {
+        let sceneIsStable = updateSceneStability(pixelBuffer: pixelBuffer)
+
         guard let subjectCenter else {
             stableFrameCount = 0
             lastSubjectCenter = nil
-            return false
+            return sceneIsStable
         }
 
         if let lastSubjectCenter {
@@ -363,7 +367,60 @@ final class CameraSessionController: NSObject, ObservableObject {
         }
 
         lastSubjectCenter = subjectCenter
-        return stableFrameCount >= 8
+        return stableFrameCount >= 8 || sceneIsStable
+    }
+
+    private func updateSceneStability(pixelBuffer: CVPixelBuffer) -> Bool {
+        guard let fingerprint = frameFingerprint(pixelBuffer: pixelBuffer) else {
+            stableSceneFrameCount = 0
+            lastFrameFingerprint = nil
+            return false
+        }
+
+        if let lastFrameFingerprint, lastFrameFingerprint.count == fingerprint.count {
+            let totalDifference = zip(lastFrameFingerprint, fingerprint).reduce(Float(0)) { partial, pair in
+                partial + abs(pair.0 - pair.1)
+            }
+            let averageDifference = totalDifference / Float(fingerprint.count)
+            stableSceneFrameCount = averageDifference < 0.045 ? stableSceneFrameCount + 1 : 0
+        } else {
+            stableSceneFrameCount = 0
+        }
+
+        lastFrameFingerprint = fingerprint
+        return stableSceneFrameCount >= 24
+    }
+
+    private func frameFingerprint(pixelBuffer: CVPixelBuffer) -> [Float]? {
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+
+        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+        guard width > 0, height > 0 else { return nil }
+
+        let columns = 6
+        let rows = 8
+        let buffer = baseAddress.assumingMemoryBound(to: UInt8.self)
+        var values: [Float] = []
+        values.reserveCapacity(columns * rows)
+
+        for row in 0..<rows {
+            let y = min(height - 1, max(0, (row * height) / rows + height / (rows * 2)))
+            for column in 0..<columns {
+                let x = min(width - 1, max(0, (column * width) / columns + width / (columns * 2)))
+                let offset = y * bytesPerRow + x * 4
+                let blue = Float(buffer[offset])
+                let green = Float(buffer[offset + 1])
+                let red = Float(buffer[offset + 2])
+                let luma = (Float(0.299) * red + Float(0.587) * green + Float(0.114) * blue) / Float(255)
+                values.append(luma)
+            }
+        }
+
+        return values
     }
 
     private func resetAnalysisState() {
@@ -374,6 +431,8 @@ final class CameraSessionController: NSObject, ObservableObject {
         lastPublishedResult = nil
         lastSubjectCenter = nil
         stableFrameCount = 0
+        lastFrameFingerprint = nil
+        stableSceneFrameCount = 0
         analysisFrameIndex = 0
     }
 

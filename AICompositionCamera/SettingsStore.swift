@@ -54,7 +54,7 @@ final class SettingsStore: ObservableObject {
 
     init() {
         let defaults = UserDefaults.standard
-        hermesMode = HermesMode(rawValue: defaults.string(forKey: Keys.hermesMode) ?? "manual") ?? .manual
+        hermesMode = HermesMode(rawValue: defaults.string(forKey: Keys.hermesMode) ?? "manualAndAutomatic") ?? .manualAndAutomatic
         automaticHermesInterval = defaults.object(forKey: Keys.automaticHermesInterval) as? TimeInterval ?? 5
         overlayIntensity = OverlayIntensity(rawValue: defaults.string(forKey: Keys.overlayIntensity) ?? "normal") ?? .normal
         let hermesKey = KeychainStore.read(service: Keys.keychainService, account: Keys.apiKey)
