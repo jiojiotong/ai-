@@ -284,6 +284,7 @@ final class CameraSessionController: NSObject, ObservableObject {
         [videoOutput.connection(with: .video), photoOutput.connection(with: .video)].forEach { connection in
             connection?.videoOrientation = .portrait
             if connection?.isVideoMirroringSupported == true {
+                connection?.automaticallyAdjustsVideoMirroring = false
                 connection?.isVideoMirrored = position == .front
             }
         }

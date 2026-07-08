@@ -56,6 +56,7 @@ final class PreviewUIView: UIView {
         videoPreviewLayer.frame = bounds
         videoPreviewLayer.connection?.videoOrientation = .portrait
         if videoPreviewLayer.connection?.isVideoMirroringSupported == true {
+            videoPreviewLayer.connection?.automaticallyAdjustsVideoMirroring = false
             videoPreviewLayer.connection?.isVideoMirrored = mirrored
         }
     }
