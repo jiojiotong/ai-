@@ -14,6 +14,8 @@ struct CameraView: View {
     @State private var focusIndicatorTask: Task<Void, Never>?
     @State private var lastAppliedHermesZoom: CGFloat?
     @State private var lastAppliedHermesZoomDate = Date.distantPast
+    @State private var zoomBeforeHermes: CGFloat?
+    @State private var filterBeforeHermesID: String?
 
     var body: some View {
         ZStack {
@@ -44,6 +46,7 @@ struct CameraView: View {
         }
         .onChange(of: hermesAdvisor.recommendedFilterID) { newValue in
             guard let newValue, PhotoFilter.all.contains(where: { $0.id == newValue }) else { return }
+            rememberCameraStateBeforeHermesIfNeeded()
             settings.selectedFilterID = newValue
         }
         .onChange(of: hermesAdvisor.captureGuidance) { newValue in
@@ -160,8 +163,7 @@ struct CameraView: View {
 
             HStack(spacing: 8) {
                 Button {
-                    hermesAdvisor.reset()
-                    resetHermesZoomMemory()
+                    clearHermesSession(restoreCamera: false, showFeedback: false)
                     camera.switchCamera()
                     buttonFeedback(camera.cameraPosition == .back ? "切换前置相机" : "切换后置相机")
                 } label: {
@@ -300,6 +302,19 @@ struct CameraView: View {
                         .background(.white.opacity(0.9), in: Capsule())
                 }
                 .buttonStyle(PressableButtonStyle())
+            }
+
+            if hasHermesResult {
+                Button {
+                    clearHermesSession()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(PressableButtonStyle(scale: 0.9))
+                .accessibilityLabel("退出 Hermes 识别")
             }
         }
         .padding(.horizontal, 14)
@@ -491,6 +506,17 @@ struct CameraView: View {
                 if hermesAdvisor.isAnalyzing {
                     ProgressView()
                         .tint(.white)
+                } else if hasHermesResult {
+                    Button {
+                        clearHermesSession()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .frame(width: 34, height: 34)
+                    }
+                    .buttonStyle(PressableButtonStyle(scale: 0.9))
+                    .accessibilityLabel("退出 Hermes 识别")
                 }
             }
 
@@ -527,7 +553,7 @@ struct CameraView: View {
                 Button {
                     triggerManualHermes()
                 } label: {
-                    Label("Hermes 识别", systemImage: "sparkles")
+                    Label(hasHermesResult ? "重新识别" : "Hermes 识别", systemImage: "sparkles")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
@@ -734,12 +760,16 @@ struct CameraView: View {
     private var controls: some View {
         HStack(spacing: 28) {
             Button {
-                triggerManualHermes()
+                if hasHermesResult {
+                    clearHermesSession()
+                } else {
+                    triggerManualHermes()
+                }
             } label: {
                 VStack(spacing: 6) {
-                    Image(systemName: "sparkles")
+                    Image(systemName: hasHermesResult ? "xmark.circle.fill" : "sparkles")
                         .font(.system(size: 24, weight: .bold))
-                    Text("识别")
+                    Text(hasHermesResult ? "退出" : "识别")
                         .font(.caption.weight(.semibold))
                 }
                 .foregroundStyle(.white)
@@ -811,6 +841,7 @@ struct CameraView: View {
         }
 
         buttonFeedback("Hermes 正在指导取景")
+        beginHermesSession()
         camera.photoStatusText = nil
         Task {
             await hermesAdvisor.analyze(
@@ -837,11 +868,13 @@ struct CameraView: View {
         guard settings.usesHermesPublicGateway || !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard camera.isFrameStable else { return }
         guard camera.latestImage != nil else { return }
+        guard !hasHermesResult else { return }
         guard Date().timeIntervalSince(lastAutomaticAnalysis) >= settings.automaticHermesInterval else { return }
         guard hasAutomaticHermesBudget() else { return }
 
         lastAutomaticAnalysis = Date()
         automaticRequestDates.append(Date())
+        beginHermesSession()
         camera.photoStatusText = nil
         Task {
             await hermesAdvisor.analyze(
@@ -861,6 +894,15 @@ struct CameraView: View {
     private var recommendedFilter: PhotoFilter? {
         guard let id = hermesAdvisor.recommendedFilterID else { return nil }
         return PhotoFilter.all.first { $0.id == id }
+    }
+
+    private var hasHermesResult: Bool {
+        hermesAdvisor.advice != nil ||
+        hermesAdvisor.captureGuidance != nil ||
+        hermesAdvisor.recognizedSubject != nil ||
+        hermesAdvisor.recommendedFilterID != nil ||
+        hermesAdvisor.filterReason != nil ||
+        hermesAdvisor.errorMessage != nil
     }
 
     private var activeCaptureGuidance: CaptureGuidance? {
@@ -1044,10 +1086,51 @@ struct CameraView: View {
         } ?? false
         guard !recentlyAppliedSameZoom else { return }
 
+        rememberCameraStateBeforeHermesIfNeeded()
         lastAppliedHermesZoom = zoom
         lastAppliedHermesZoomDate = Date()
         camera.setZoomFactor(zoom)
         buttonFeedback("Hermes 已切到 \(zoomLabel(zoom))x")
+    }
+
+    private func beginHermesSession() {
+        zoomBeforeHermes = camera.zoomFactor
+        filterBeforeHermesID = settings.selectedFilterID
+        resetHermesZoomMemory()
+        hermesAdvisor.reset()
+    }
+
+    private func rememberCameraStateBeforeHermesIfNeeded() {
+        if zoomBeforeHermes == nil {
+            zoomBeforeHermes = camera.zoomFactor
+        }
+        if filterBeforeHermesID == nil {
+            filterBeforeHermesID = settings.selectedFilterID
+        }
+    }
+
+    private func clearHermesSession(restoreCamera: Bool = true, showFeedback: Bool = true) {
+        let zoomToRestore = zoomBeforeHermes
+        let filterToRestore = filterBeforeHermesID
+
+        hermesAdvisor.reset()
+        resetHermesZoomMemory()
+        zoomBeforeHermes = nil
+        filterBeforeHermesID = nil
+        lastAutomaticAnalysis = Date()
+
+        if restoreCamera {
+            if let filterToRestore, PhotoFilter.all.contains(where: { $0.id == filterToRestore }) {
+                settings.selectedFilterID = filterToRestore
+            }
+            if let zoomToRestore, isZoomSupported(zoomToRestore) {
+                camera.setZoomFactor(zoomToRestore)
+            }
+        }
+
+        if showFeedback {
+            buttonFeedback(restoreCamera ? "已退出识别并恢复取景" : "已退出 Hermes 识别")
+        }
     }
 
     private func resetHermesZoomMemory() {
