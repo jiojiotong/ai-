@@ -10,6 +10,7 @@ final class HermesCompositionAdvisor: ObservableObject {
     @Published var recommendedFilterID: String?
     @Published var filterReason: String?
     @Published var errorMessage: String?
+    @Published private(set) var lastFailureDate: Date?
     private var activeRequestID = UUID()
 
     func reset() {
@@ -20,6 +21,12 @@ final class HermesCompositionAdvisor: ObservableObject {
         recommendedFilterID = nil
         filterReason = nil
         errorMessage = nil
+        lastFailureDate = nil
+    }
+
+    func shouldThrottleAutomaticAnalysis(cooldown: TimeInterval) -> Bool {
+        guard let lastFailureDate else { return false }
+        return Date().timeIntervalSince(lastFailureDate) < cooldown
     }
 
     func analyze(image: UIImage?, localResult: CompositionResult?, settings: SettingsStore) async {
@@ -57,9 +64,12 @@ final class HermesCompositionAdvisor: ObservableObject {
             captureGuidance = parsed.guidance
             recommendedFilterID = parsed.filterID
             filterReason = parsed.filterReason
+            lastFailureDate = nil
         } catch {
             guard activeRequestID == requestID else { return }
-            errorMessage = "Hermes 分析失败：\(error.localizedDescription)"
+            captureGuidance = nil
+            lastFailureDate = Date()
+            errorMessage = friendlyErrorMessage(for: error)
         }
 
         if activeRequestID == requestID {
@@ -148,6 +158,19 @@ final class HermesCompositionAdvisor: ObservableObject {
             throw HermesError.emptyResponse
         }
         return content
+    }
+
+    private func friendlyErrorMessage(for error: Error) -> String {
+        if let hermesError = error as? HermesError {
+            switch hermesError {
+            case .invalidBaseURL:
+                return hermesError.localizedDescription
+            case .emptyResponse, .badResponse(_):
+                return "Hermes 暂不可用，已用本地指导"
+            }
+        }
+
+        return "Hermes 暂不可用，已用本地指导"
     }
 
     private func chatCompletionsURL(from apiBaseURL: String) -> URL? {
@@ -289,8 +312,8 @@ private enum HermesError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .badResponse(let message):
-            guard let message, !message.isEmpty else { return "接口返回异常" }
-            return "接口返回异常：\(message.prefix(160))"
+            guard let message, !message.isEmpty else { return "Hermes 暂不可用" }
+            return "Hermes 暂不可用：\(message.prefix(120))"
         case .emptyResponse: return "没有收到建议"
         case .invalidBaseURL: return "中转站地址格式不正确"
         }

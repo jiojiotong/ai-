@@ -60,7 +60,9 @@ struct OverlayView: View {
             }
             .stroke(.yellow.opacity(0.8), style: StrokeStyle(lineWidth: 2, dash: [8, 8]))
         case .arrow(let direction, let origin):
-            arrow(direction: direction, origin: origin, in: displayRect)
+            if intensity == .detailed {
+                arrow(direction: direction, origin: origin, in: displayRect)
+            }
         }
     }
 

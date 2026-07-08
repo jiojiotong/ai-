@@ -11,7 +11,6 @@ struct CameraView: View {
     @State private var automaticRequestDates: [Date] = []
     @State private var feedbackMessage: String?
     @State private var feedbackTask: Task<Void, Never>?
-    @State private var isToolPanelExpanded = false
     @State private var focusIndicatorPoint: CGPoint?
     @State private var focusIndicatorTask: Task<Void, Never>?
     @State private var lastAppliedHermesZoom: CGFloat?
@@ -238,46 +237,12 @@ struct CameraView: View {
         VStack(spacing: 18) {
             modeBar
             compactCoachBar
-
-            if isToolPanelExpanded {
-                ScrollView(.vertical, showsIndicators: false) {
-                    featurePanel
-                }
-                .frame(maxHeight: 230)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-
             controls
         }
     }
 
     private var modeBar: some View {
-        HStack(spacing: 18) {
-            Button {
-                isToolPanelExpanded.toggle()
-                buttonFeedback(isToolPanelExpanded ? "打开工具" : "收起工具")
-            } label: {
-                Image(systemName: isToolPanelExpanded ? "chevron.down.circle" : "slider.horizontal.3")
-                    .font(.system(size: 27, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 48, height: 44)
-            }
-            .buttonStyle(PressableButtonStyle())
-
-            Spacer()
-
-            Button {
-                settings.selectedCameraMode = .aiComposition
-                isToolPanelExpanded.toggle()
-                buttonFeedback(isToolPanelExpanded ? "打开构图工具" : "收起构图工具")
-            } label: {
-                Image(systemName: "viewfinder")
-                    .font(.system(size: 27, weight: .semibold))
-                    .foregroundStyle(settings.selectedCameraMode == .aiComposition ? .cyan : .white)
-                    .frame(width: 48, height: 44)
-            }
-            .buttonStyle(PressableButtonStyle())
-
+        HStack {
             Spacer()
 
             Button {
@@ -293,6 +258,8 @@ struct CameraView: View {
                 .frame(width: 48, height: 44)
             }
             .buttonStyle(PressableButtonStyle())
+
+            Spacer()
         }
         .padding(.horizontal, 34)
     }
@@ -868,6 +835,7 @@ struct CameraView: View {
     private func triggerAutomaticHermesIfNeeded() {
         guard settings.hermesMode.allowsAutomatic else { return }
         guard !hermesAdvisor.isAnalyzing else { return }
+        guard !hermesAdvisor.shouldThrottleAutomaticAnalysis(cooldown: 45) else { return }
         guard !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard camera.isFrameStable else { return }
         guard camera.latestImage != nil else { return }
@@ -902,6 +870,10 @@ struct CameraView: View {
     }
 
     private var activeCaptureGuidance: CaptureGuidance? {
+        if camera.compositionResult?.primarySubject == nil {
+            return normalizedGuidance(camera.compositionResult?.liveGuidance)
+        }
+
         let guidance = hermesAdvisor.captureGuidance ?? camera.compositionResult?.liveGuidance
         return normalizedGuidance(guidance)
     }
@@ -929,7 +901,7 @@ struct CameraView: View {
 
     private var aiCoachTitle: String {
         if hermesAdvisor.isAnalyzing { return "Hermes 正在识别取景" }
-        if hermesAdvisor.errorMessage != nil { return "Hermes 未就绪" }
+        if hermesAdvisor.errorMessage != nil { return "Hermes 暂不可用" }
         if hermesAdvisor.advice != nil { return "Hermes 取景建议" }
         if camera.photoStatusText != nil { return "拍摄结果" }
         return "实时构图提示"
@@ -937,13 +909,13 @@ struct CameraView: View {
 
     private var aiCoachMessage: String {
         if hermesAdvisor.isAnalyzing { return "保持手机稳定，正在判断主体、留白和角度。" }
-        if let error = hermesAdvisor.errorMessage { return error }
         if let guidance = activeCaptureGuidance {
             if let zoom = guidance.zoomFactor {
                 return "\(guidance.message)，切到 \(zoomLabel(zoom))x 取景。"
             }
             return guidance.message
         }
+        if let error = hermesAdvisor.errorMessage { return error }
         if let advice = hermesAdvisor.advice, !advice.isEmpty { return advice }
         if let photoStatus = camera.photoStatusText { return photoStatus }
         return camera.compositionResult?.topSuggestion ?? "对准主体后让 Hermes 指导取景。"

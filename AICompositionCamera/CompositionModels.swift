@@ -54,26 +54,59 @@ struct CompositionResult {
     var liveGuidance: CaptureGuidance {
         guard let subject = primarySubject else {
             return CaptureGuidance(
-                direction: .closer,
-                zoomFactor: 2,
-                message: "靠近主体",
+                direction: nil,
+                zoomFactor: nil,
+                message: "把主体放进取景框",
                 targetRect: nil,
                 source: .local,
-                priority: 60
+                priority: 40
             )
         }
 
         let rect = subject.rect
         let center = rect.center
 
-        if rect.area < 0.045 {
+        if rect.minX < 0.04 || center.x < 0.30 {
             return CaptureGuidance(
-                direction: .closer,
-                zoomFactor: 2,
-                message: "拉到 2x",
-                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: 0.5)),
+                direction: .left,
+                zoomFactor: nil,
+                message: "相机左移",
+                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: center.y)),
                 source: .local,
-                priority: 86
+                priority: 90
+            )
+        }
+
+        if rect.maxX > 0.96 || center.x > 0.70 {
+            return CaptureGuidance(
+                direction: .right,
+                zoomFactor: nil,
+                message: "相机右移",
+                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: center.y)),
+                source: .local,
+                priority: 90
+            )
+        }
+
+        if rect.minY < 0.04 || center.y < 0.26 {
+            return CaptureGuidance(
+                direction: .up,
+                zoomFactor: nil,
+                message: "相机上移",
+                targetRect: targetRect(for: rect, center: CGPoint(x: center.x, y: 0.5)),
+                source: .local,
+                priority: 88
+            )
+        }
+
+        if rect.maxY > 0.96 || center.y > 0.74 {
+            return CaptureGuidance(
+                direction: .down,
+                zoomFactor: nil,
+                message: "相机下移",
+                targetRect: targetRect(for: rect, center: CGPoint(x: center.x, y: 0.5)),
+                source: .local,
+                priority: 88
             )
         }
 
@@ -88,47 +121,14 @@ struct CompositionResult {
             )
         }
 
-        if rect.minX < 0.05 || center.x < 0.38 {
+        if rect.area < 0.035 {
             return CaptureGuidance(
-                direction: .left,
-                zoomFactor: nil,
-                message: "相机左移",
-                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: center.y)),
+                direction: nil,
+                zoomFactor: 2,
+                message: "切到 2x",
+                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: 0.5)),
                 source: .local,
-                priority: 82
-            )
-        }
-
-        if rect.maxX > 0.95 || center.x > 0.62 {
-            return CaptureGuidance(
-                direction: .right,
-                zoomFactor: nil,
-                message: "相机右移",
-                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: center.y)),
-                source: .local,
-                priority: 82
-            )
-        }
-
-        if rect.minY < 0.05 || center.y < 0.34 {
-            return CaptureGuidance(
-                direction: .up,
-                zoomFactor: nil,
-                message: "相机上移",
-                targetRect: targetRect(for: rect, center: CGPoint(x: center.x, y: 0.42)),
-                source: .local,
-                priority: 78
-            )
-        }
-
-        if rect.maxY > 0.96 || center.y > 0.68 {
-            return CaptureGuidance(
-                direction: .down,
-                zoomFactor: nil,
-                message: "相机下移",
-                targetRect: targetRect(for: rect, center: CGPoint(x: center.x, y: 0.58)),
-                source: .local,
-                priority: 78
+                priority: 72
             )
         }
 
@@ -236,8 +236,8 @@ enum CameraMoveDirection: String {
         case .right: return "arrow.right"
         case .up: return "arrow.up"
         case .down: return "arrow.down"
-        case .closer: return "plus.magnifyingglass"
-        case .farther: return "minus.magnifyingglass"
+        case .closer: return "plus"
+        case .farther: return "minus"
         case .hold: return "checkmark"
         }
     }

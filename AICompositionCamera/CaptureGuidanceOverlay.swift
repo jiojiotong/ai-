@@ -40,30 +40,34 @@ struct CaptureGuidanceOverlay: View {
     @ViewBuilder
     private func directionCue(_ guidance: CaptureGuidance, in displayRect: CGRect) -> some View {
         if let direction = guidance.direction {
-            let point = cuePosition(for: direction, in: displayRect)
-            VStack(spacing: 8) {
-                Image(systemName: direction.systemImage)
-                    .font(.system(size: direction == .hold ? 30 : 46, weight: .heavy))
-                    .foregroundStyle(direction == .hold ? .black : .white)
-                    .frame(width: 76, height: 76)
-                    .background(direction == .hold ? Color.green.opacity(0.92) : Color.black.opacity(0.44), in: Circle())
-                    .overlay {
-                        Circle()
-                            .stroke(.white.opacity(direction == .hold ? 0.0 : 0.52), lineWidth: 1.5)
-                    }
-                    .shadow(color: .black.opacity(0.42), radius: 10, x: 0, y: 5)
+            if direction == .closer || direction == .farther {
+                EmptyView()
+            } else {
+                let point = cuePosition(for: direction, in: displayRect)
+                VStack(spacing: 8) {
+                    Image(systemName: direction.systemImage)
+                        .font(.system(size: direction == .hold ? 30 : 46, weight: .heavy))
+                        .foregroundStyle(direction == .hold ? .black : .white)
+                        .frame(width: 76, height: 76)
+                        .background(direction == .hold ? Color.green.opacity(0.92) : Color.black.opacity(0.44), in: Circle())
+                        .overlay {
+                            Circle()
+                                .stroke(.white.opacity(direction == .hold ? 0.0 : 0.52), lineWidth: 1.5)
+                        }
+                        .shadow(color: .black.opacity(0.42), radius: 10, x: 0, y: 5)
 
-                Text(guidance.message.isEmpty ? direction.title : guidance.message)
-                    .font(.caption.weight(.heavy))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(.black.opacity(0.42), in: Capsule())
+                    Text(guidance.message.isEmpty ? direction.title : guidance.message)
+                        .font(.caption.weight(.heavy))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(.black.opacity(0.42), in: Capsule())
+                }
+                .frame(width: 160)
+                .position(point)
             }
-            .frame(width: 160)
-            .position(point)
         }
     }
 
