@@ -878,13 +878,19 @@ struct CameraView: View {
 
     private var stageHintText: String {
         if hermesAdvisor.isAnalyzing { return "正在识别取景" }
-        if let guidance = activeCaptureGuidance {
+        if let guidance = normalizedGuidance(hermesAdvisor.captureGuidance) {
             if let zoom = guidance.zoomFactor {
                 return "\(guidance.message) \(zoomLabel(zoom))x"
             }
             return guidance.message
         }
         if let advice = hermesAdvisor.advice, !advice.isEmpty { return advice }
+        if let guidance = activeCaptureGuidance {
+            if let zoom = guidance.zoomFactor {
+                return "\(guidance.message) \(zoomLabel(zoom))x"
+            }
+            return guidance.message
+        }
         if let suggestion = camera.compositionResult?.topSuggestion { return suggestion }
         return "对准主体后按指导"
     }
@@ -909,13 +915,19 @@ struct CameraView: View {
     private var aiCoachMessage: String {
         if hermesAdvisor.isAnalyzing { return "保持手机稳定，正在判断主体、留白和角度。" }
         if let error = hermesAdvisor.errorMessage { return error }
-        if let guidance = activeCaptureGuidance {
+        if let guidance = normalizedGuidance(hermesAdvisor.captureGuidance) {
             if let zoom = guidance.zoomFactor {
                 return "\(guidance.message)，切到 \(zoomLabel(zoom))x 取景。"
             }
             return guidance.message
         }
         if let advice = hermesAdvisor.advice, !advice.isEmpty { return advice }
+        if let guidance = activeCaptureGuidance {
+            if let zoom = guidance.zoomFactor {
+                return "\(guidance.message)，切到 \(zoomLabel(zoom))x 取景。"
+            }
+            return guidance.message
+        }
         if let photoStatus = camera.photoStatusText { return photoStatus }
         return camera.compositionResult?.topSuggestion ?? "对准主体后让 Hermes 指导取景。"
     }
