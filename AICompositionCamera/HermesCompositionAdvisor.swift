@@ -10,6 +10,17 @@ final class HermesCompositionAdvisor: ObservableObject {
     @Published var recommendedFilterID: String?
     @Published var filterReason: String?
     @Published var errorMessage: String?
+    private var activeRequestID = UUID()
+
+    func reset() {
+        activeRequestID = UUID()
+        isAnalyzing = false
+        advice = nil
+        captureGuidance = nil
+        recommendedFilterID = nil
+        filterReason = nil
+        errorMessage = nil
+    }
 
     func analyze(image: UIImage?, localResult: CompositionResult?, settings: SettingsStore) async {
         guard settings.hermesMode != .off else { return }
@@ -22,6 +33,8 @@ final class HermesCompositionAdvisor: ObservableObject {
             return
         }
 
+        let requestID = UUID()
+        activeRequestID = requestID
         isAnalyzing = true
         advice = nil
         captureGuidance = nil
@@ -39,15 +52,19 @@ final class HermesCompositionAdvisor: ObservableObject {
                 model: settings.model
             )
             let parsed = parseResponse(response, localResult: localResult)
+            guard activeRequestID == requestID else { return }
             advice = parsed.advice
             captureGuidance = parsed.guidance
             recommendedFilterID = parsed.filterID
             filterReason = parsed.filterReason
         } catch {
+            guard activeRequestID == requestID else { return }
             errorMessage = "Hermes 分析失败：\(error.localizedDescription)"
         }
 
-        isAnalyzing = false
+        if activeRequestID == requestID {
+            isAnalyzing = false
+        }
     }
 
     private func compressedJPEG(from image: UIImage) -> Data? {

@@ -19,6 +19,7 @@ final class CameraSessionController: NSObject, ObservableObject {
     @Published var minZoomFactor: CGFloat = 1
     @Published var maxZoomFactor: CGFloat = 1
     @Published var cameraPosition: AVCaptureDevice.Position = .back
+    @Published var isCapturingPhoto = false
 
     private let sessionQueue = DispatchQueue(label: "camera.session.queue")
     private let videoOutputQueue = DispatchQueue(label: "camera.video.output.queue")
@@ -43,6 +44,7 @@ final class CameraSessionController: NSObject, ObservableObject {
     private var stableFrameCount = 0
     private var isSessionConfigured = false
     private var analysisFrameIndex = 0
+    private var isPhotoCaptureInProgress = false
 
     @MainActor
     func requestAccessAndStart() async {
@@ -77,8 +79,16 @@ final class CameraSessionController: NSObject, ObservableObject {
                 DispatchQueue.main.async { self.photoStatusText = "相机还没准备好。" }
                 return
             }
+            guard !self.isPhotoCaptureInProgress else {
+                DispatchQueue.main.async { self.photoStatusText = "正在保存上一张照片..." }
+                return
+            }
+            self.isPhotoCaptureInProgress = true
             self.setPendingCaptureAspectRatio(aspectRatio)
-            DispatchQueue.main.async { self.photoStatusText = "正在处理照片..." }
+            DispatchQueue.main.async {
+                self.isCapturingPhoto = true
+                self.photoStatusText = "正在处理照片..."
+            }
             let settings = AVCapturePhotoSettings()
             self.photoOutput.capturePhoto(with: settings, delegate: self)
         }
@@ -124,15 +134,26 @@ final class CameraSessionController: NSObject, ObservableObject {
     func switchCamera() {
         sessionQueue.async { [weak self] in
             guard let self else { return }
+            guard !self.isPhotoCaptureInProgress else {
+                DispatchQueue.main.async { self.photoStatusText = "正在保存照片，稍后再切换相机。" }
+                return
+            }
             let nextPosition: AVCaptureDevice.Position = self.cameraPosition == .back ? .front : .back
             self.session.beginConfiguration()
             let didSwitch = self.configureVideoInput(position: nextPosition)
             self.applyVideoConnectionSettings(position: didSwitch ? nextPosition : self.cameraPosition)
             self.session.commitConfiguration()
+            if didSwitch {
+                self.resetAnalysisState()
+            }
 
             DispatchQueue.main.async {
                 if didSwitch {
                     self.cameraPosition = nextPosition
+                    self.compositionResult = nil
+                    self.latestImage = nil
+                    self.filteredPreviewImage = nil
+                    self.isFrameStable = false
                     self.photoStatusText = nextPosition == .front ? "已切换前置相机。" : "已切换后置相机。"
                 } else {
                     self.photoStatusText = "当前设备无法切换相机。"
@@ -166,7 +187,7 @@ final class CameraSessionController: NSObject, ObservableObject {
                 device.unlockForConfiguration()
 
                 DispatchQueue.main.async {
-                    self.photoStatusText = "已锁定对焦和曝光。"
+                    self.photoStatusText = "已完成对焦和测光。"
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -344,6 +365,17 @@ final class CameraSessionController: NSObject, ObservableObject {
         return stableFrameCount >= 8
     }
 
+    private func resetAnalysisState() {
+        lastAnalysisTime = Date.distantPast
+        lastImageUpdateTime = Date.distantPast
+        lastPreviewUpdateTime = Date.distantPast
+        lastCompositionUpdateTime = Date.distantPast
+        lastPublishedResult = nil
+        lastSubjectCenter = nil
+        stableFrameCount = 0
+        analysisFrameIndex = 0
+    }
+
     private func compositionResultToPublish(_ result: CompositionResult, now: Date) -> CompositionResult? {
         let shouldPublish = now.timeIntervalSince(lastCompositionUpdateTime) >= 0.35
 
@@ -385,6 +417,16 @@ final class CameraSessionController: NSObject, ObservableObject {
         captureAspectRatioLock.unlock()
         return aspectRatio
     }
+
+    private func finishPhotoCapture() {
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            self.isPhotoCaptureInProgress = false
+            DispatchQueue.main.async {
+                self.isCapturingPhoto = false
+            }
+        }
+    }
 }
 
 extension CameraSessionController: AVCaptureVideoDataOutputSampleBufferDelegate {
@@ -407,6 +449,7 @@ extension CameraSessionController: AVCapturePhotoCaptureDelegate {
             DispatchQueue.main.async {
                 self.photoStatusText = "拍照失败：\(error.localizedDescription)"
             }
+            finishPhotoCapture()
             return
         }
 
@@ -414,6 +457,7 @@ extension CameraSessionController: AVCapturePhotoCaptureDelegate {
             DispatchQueue.main.async {
                 self.photoStatusText = "拍照失败：无法读取照片。"
             }
+            finishPhotoCapture()
             return
         }
 
@@ -458,6 +502,7 @@ extension CameraSessionController: AVCapturePhotoCaptureDelegate {
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { [weak self] status in
             guard status == .authorized || status == .limited else {
                 DispatchQueue.main.async { self?.photoStatusText = "没有相册保存权限。" }
+                self?.finishPhotoCapture()
                 return
             }
 
@@ -471,6 +516,7 @@ extension CameraSessionController: AVCapturePhotoCaptureDelegate {
                         self?.photoStatusText = "保存失败：\(error?.localizedDescription ?? "未知错误")"
                     }
                 }
+                self?.finishPhotoCapture()
             }
         }
     }

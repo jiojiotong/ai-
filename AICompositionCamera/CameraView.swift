@@ -162,6 +162,8 @@ struct CameraView: View {
 
             HStack(spacing: 8) {
                 Button {
+                    hermesAdvisor.reset()
+                    resetHermesZoomMemory()
                     camera.switchCamera()
                     buttonFeedback(camera.cameraPosition == .back ? "切换前置相机" : "切换后置相机")
                 } label: {
@@ -782,19 +784,22 @@ struct CameraView: View {
             .buttonStyle(PressableButtonStyle())
 
             Button {
-                buttonFeedback(isCaptureReady ? "构图就绪，正在拍照" : "正在拍照")
+                buttonFeedback(camera.isCapturingPhoto ? "正在保存上一张照片" : (isCaptureReady ? "构图就绪，正在拍照" : "正在拍照"))
                 camera.capturePhoto(aspectRatio: settings.selectedAspectRatio)
             } label: {
                 Circle()
-                    .strokeBorder(isCaptureReady ? Color.green.opacity(0.95) : Color.white, lineWidth: 5)
+                    .strokeBorder(shutterAccentColor, lineWidth: 5)
                     .frame(width: 76, height: 76)
                     .overlay {
                         Circle()
-                            .fill(isCaptureReady ? Color.green.opacity(0.9) : Color.white.opacity(0.85))
+                            .fill(shutterFillColor)
                             .frame(width: 58, height: 58)
                     }
                     .overlay {
-                        if isCaptureReady {
+                        if camera.isCapturingPhoto {
+                            ProgressView()
+                                .tint(.black)
+                        } else if isCaptureReady {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 24, weight: .heavy))
                                 .foregroundStyle(.black)
@@ -964,7 +969,19 @@ struct CameraView: View {
     }
 
     private var isCaptureReady: Bool {
-        activeCaptureGuidance?.direction == .hold && camera.isFrameStable && !hermesAdvisor.isAnalyzing
+        activeCaptureGuidance?.direction == .hold && camera.isFrameStable && !hermesAdvisor.isAnalyzing && !camera.isCapturingPhoto
+    }
+
+    private var shutterAccentColor: Color {
+        if camera.isCapturingPhoto { return .white.opacity(0.52) }
+        if isCaptureReady { return .green.opacity(0.95) }
+        return .white
+    }
+
+    private var shutterFillColor: Color {
+        if camera.isCapturingPhoto { return .white.opacity(0.72) }
+        if isCaptureReady { return .green.opacity(0.9) }
+        return .white.opacity(0.85)
     }
 
     private var portraitHint: String {
@@ -1048,6 +1065,11 @@ struct CameraView: View {
         lastAppliedHermesZoomDate = Date()
         camera.setZoomFactor(zoom)
         buttonFeedback("Hermes 已切到 \(zoomLabel(zoom))x")
+    }
+
+    private func resetHermesZoomMemory() {
+        lastAppliedHermesZoom = nil
+        lastAppliedHermesZoomDate = Date.distantPast
     }
 
     private func zoomLabel(_ value: CGFloat) -> String {
