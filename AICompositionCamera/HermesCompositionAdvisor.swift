@@ -121,6 +121,7 @@ final class HermesCompositionAdvisor: ObservableObject {
         变焦字段只能填数字倍率：0.5、1、1.5、2、3、4、8。没有必要变焦就填 1。
         滤镜必须从可选滤镜里选 1 个，必须返回 filterId，不要返回滤镜中文名。
         禁止返回 JSON 预设名作为滤镜：natural_clean、portrait_soft、food_warm、product_neutral、night_neon、film_matte、cinematic_teal_orange、travel_vivid、bw_graphic 都不是本 App 的 filterId。
+        也禁止返回 camelCase 伪 ID：naturalClean、portraitSoft、foodWarm、productNeutral、nightNeon、filmMatte、cinematicTealOrange、travelVivid、bwGraphic 都不是本 App 的 filterId。
         当前取景比例：\(aspectRatioTitle)
         本地端侧检测结果：\(localContext)
         可选滤镜：
@@ -204,38 +205,38 @@ final class HermesCompositionAdvisor: ObservableObject {
         var zoomFactor: CGFloat?
         var filterID: String?
         var filterReason: String?
+        var extractedValues: [String: String] = [:]
 
         for line in response.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.hasPrefix("主体：") {
-                subject = String(trimmed.dropFirst("主体：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-            } else if trimmed.hasPrefix("识别：") {
-                subject = String(trimmed.dropFirst("识别：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-            } else if trimmed.hasPrefix("动作：") {
-                advice = String(trimmed.dropFirst("动作：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-            } else if trimmed.hasPrefix("建议：") {
-                advice = String(trimmed.dropFirst("建议：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-            } else if trimmed.hasPrefix("移动：") {
-                let candidate = String(trimmed.dropFirst("移动：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-                direction = parseDirection(candidate)
-            } else if trimmed.hasPrefix("方向：") {
-                let candidate = String(trimmed.dropFirst("方向：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-                direction = parseDirection(candidate)
-            } else if trimmed.hasPrefix("变焦：") {
-                let candidate = String(trimmed.dropFirst("变焦：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-                zoomFactor = parseZoomFactor(candidate)
-            } else if trimmed.hasPrefix("倍率：") {
-                let candidate = String(trimmed.dropFirst("倍率：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-                zoomFactor = parseZoomFactor(candidate)
-            } else if trimmed.hasPrefix("滤镜：") {
-                let candidate = String(trimmed.dropFirst("滤镜：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-                if let filter = PhotoFilter.matching(candidate) {
-                    filterID = filter.id
-                }
-            } else if trimmed.hasPrefix("原因：") {
-                filterReason = String(trimmed.dropFirst("原因：".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if let pair = labeledValue(from: trimmed) {
+                extractedValues[pair.label] = pair.value
             }
         }
+
+        if let jsonValues = jsonResponseValues(from: response) {
+            extractedValues.merge(jsonValues) { _, jsonValue in jsonValue }
+        }
+
+        subject = extractedValues["主体"] ?? extractedValues["识别"] ?? extractedValues["subject"] ?? subject
+        advice = extractedValues["动作"] ?? extractedValues["建议"] ?? extractedValues["action"] ?? extractedValues["framing_action"] ?? advice
+
+        if let candidate = extractedValues["移动"] ?? extractedValues["方向"] ?? extractedValues["move"] ?? extractedValues["direction"] ?? extractedValues["camera_move"] {
+            direction = parseDirection(candidate)
+        }
+
+        if let candidate = extractedValues["变焦"] ?? extractedValues["倍率"] ?? extractedValues["zoom"] ?? extractedValues["zoom_factor"] {
+            zoomFactor = parseZoomFactor(candidate)
+        }
+
+        if let candidate = extractedValues["滤镜"] ?? extractedValues["filter"] ?? extractedValues["filterId"] ?? extractedValues["filter_id"],
+           let filter = PhotoFilter.matching(candidate) {
+            filterID = filter.id
+        }
+
+        filterReason = extractedValues["原因"] ?? extractedValues["reason"] ?? extractedValues["rationale"] ?? filterReason
+        advice = sanitizedAdvice(advice)
 
         if direction == nil {
             direction = inferDirection(from: advice)
@@ -269,6 +270,45 @@ final class HermesCompositionAdvisor: ObservableObject {
         return (advice, sanitizedSubject(subject), guidance, filterID, filterReason)
     }
 
+    private func labeledValue(from line: String) -> (label: String, value: String)? {
+        let separators = ["：", ":"]
+        for separator in separators {
+            guard let range = line.range(of: separator) else { continue }
+            let label = String(line[..<range.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'` "))
+            let value = String(line[range.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`,， "))
+            guard !label.isEmpty, !value.isEmpty else { return nil }
+            return (label, value)
+        }
+        return nil
+    }
+
+    private func jsonResponseValues(from response: String) -> [String: String]? {
+        let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let start = trimmed.firstIndex(of: "{"),
+              let end = trimmed.lastIndex(of: "}"),
+              start <= end else { return nil }
+
+        let jsonText = String(trimmed[start...end])
+        guard let data = jsonText.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        var values: [String: String] = [:]
+        for (key, value) in object {
+            if let string = value as? String {
+                values[key] = string
+            } else if let number = value as? NSNumber {
+                values[key] = number.stringValue
+            }
+        }
+        return values
+    }
+
     private func correctedGuidance(
         direction: CameraMoveDirection?,
         zoomFactor: CGFloat?,
@@ -283,15 +323,96 @@ final class HermesCompositionAdvisor: ObservableObject {
         let localIsAction = localDirection != nil && localDirection != .hold
         let aiSaysHold = direction == .hold || (direction == nil && zoomFactor == nil)
 
-        guard aiSaysHold, localIsAction else {
+        guard aiSaysHold else {
             return (direction, zoomFactor, advice)
         }
 
-        return (
-            localDirection,
-            localGuidance.zoomFactor ?? zoomFactor,
-            localGuidance.message
-        )
+        if localIsAction {
+            return (
+                localDirection,
+                localGuidance.zoomFactor ?? zoomFactor,
+                localGuidance.message
+            )
+        }
+
+        if let microGuidance = microGuidance(from: localResult) {
+            return (
+                microGuidance.direction,
+                microGuidance.zoomFactor ?? zoomFactor,
+                microGuidance.message
+            )
+        }
+
+        return (direction, zoomFactor, advice)
+    }
+
+    private func microGuidance(from localResult: CompositionResult?) -> CaptureGuidance? {
+        guard let subject = localResult?.primarySubject else { return nil }
+        let rect = subject.rect
+        let center = rect.center
+
+        if center.x < 0.43 {
+            return CaptureGuidance(
+                direction: .left,
+                zoomFactor: nil,
+                message: "相机左移",
+                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: center.y)),
+                source: .ai,
+                priority: 96
+            )
+        }
+
+        if center.x > 0.57 {
+            return CaptureGuidance(
+                direction: .right,
+                zoomFactor: nil,
+                message: "相机右移",
+                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: center.y)),
+                source: .ai,
+                priority: 96
+            )
+        }
+
+        if center.y < 0.40 {
+            return CaptureGuidance(
+                direction: .up,
+                zoomFactor: nil,
+                message: "相机上移",
+                targetRect: targetRect(for: rect, center: CGPoint(x: center.x, y: 0.5)),
+                source: .ai,
+                priority: 94
+            )
+        }
+
+        if center.y > 0.62 {
+            return CaptureGuidance(
+                direction: .down,
+                zoomFactor: nil,
+                message: "相机下移",
+                targetRect: targetRect(for: rect, center: CGPoint(x: center.x, y: 0.5)),
+                source: .ai,
+                priority: 94
+            )
+        }
+
+        if rect.area < 0.06 {
+            return CaptureGuidance(
+                direction: nil,
+                zoomFactor: 2,
+                message: "切到 2x",
+                targetRect: targetRect(for: rect, center: CGPoint(x: 0.5, y: 0.5)),
+                source: .ai,
+                priority: 88
+            )
+        }
+
+        return nil
+    }
+
+    private func targetRect(for rect: CGRect, center: CGPoint) -> CGRect {
+        let x = min(max(center.x - rect.width / 2, 0.04), max(0.04, 0.96 - rect.width))
+        let y = min(max(center.y - rect.height / 2, 0.04), max(0.04, 0.96 - rect.height))
+        return CGRect(x: x, y: y, width: rect.width, height: rect.height)
     }
 
     private func displayMessage(subject: String?, advice: String, direction: CameraMoveDirection?) -> String {
@@ -316,6 +437,14 @@ final class HermesCompositionAdvisor: ObservableObject {
             .replacingOccurrences(of: "。", with: "")
         guard !cleaned.isEmpty, cleaned != "未识别主体" else { return nil }
         return String(cleaned.prefix(18))
+    }
+
+    private func sanitizedAdvice(_ value: String) -> String {
+        let cleaned = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`。，, "))
+        guard !cleaned.isEmpty else { return cleaned }
+        return String(cleaned.prefix(12))
     }
 
     private func parseDirection(_ value: String) -> CameraMoveDirection? {
@@ -357,7 +486,11 @@ final class HermesCompositionAdvisor: ObservableObject {
             .replacingOccurrences(of: "倍率", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard let number = Double(cleaned) else { return nil }
-        return CGFloat(min(max(number, 0.5), 8))
+        let supported = [0.5, 1, 1.5, 2, 3, 4, 8]
+        let nearest = supported.min { lhs, rhs in
+            abs(lhs - number) < abs(rhs - number)
+        } ?? 1
+        return CGFloat(nearest)
     }
 }
 

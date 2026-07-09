@@ -898,15 +898,16 @@ struct CameraView: View {
         guard !hermesAdvisor.isAnalyzing else { return }
         guard settings.usesHermesPublicGateway || !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard camera.latestImage != nil else { return }
-        guard !hasHermesResult else { return }
         let now = Date()
         guard camera.isFrameStable else {
             resetAutomaticSceneTracking(now: now)
             return
         }
         guard let signature = updateAutomaticSceneTracking(now: now) else { return }
+        let sceneChangedAfterResult = hasHermesResult && signature != lastAutomaticSceneSignature
+        let minimumInterval = sceneChangedAfterResult ? min(3, settings.automaticHermesInterval) : settings.automaticHermesInterval
         guard now.timeIntervalSince(automaticSceneStableSince) >= settings.automaticHermesInterval else { return }
-        guard now.timeIntervalSince(lastAutomaticAnalysis) >= settings.automaticHermesInterval else { return }
+        guard now.timeIntervalSince(lastAutomaticAnalysis) >= minimumInterval else { return }
         guard signature != lastAutomaticSceneSignature || now.timeIntervalSince(lastAutomaticAnalysis) >= 30 else { return }
         guard hasAutomaticHermesBudget() else { return }
 

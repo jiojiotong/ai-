@@ -261,6 +261,35 @@ struct PhotoFilter: Identifiable, Equatable {
         let token = normalized
             .components(separatedBy: CharacterSet(charactersIn: " \t\n\r，,。.;；:：()（）[]【】"))
             .first ?? normalized
+        let canonicalToken = token
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+            .lowercased()
+
+        let aliases: [String: String] = [
+            "natural_clean": "original",
+            "naturalclean": "original",
+            "portrait_soft": "softPortrait",
+            "portraitsoft": "softPortrait",
+            "food_warm": "foodie",
+            "foodwarm": "foodie",
+            "product_neutral": "classicChromeAI",
+            "productneutral": "classicChromeAI",
+            "night_neon": "nightCity",
+            "nightneon": "nightCity",
+            "film_matte": "fadeMatte",
+            "filmmatte": "fadeMatte",
+            "cinematic_teal_orange": "tealOrange",
+            "cinematictealorange": "tealOrange",
+            "travel_vivid": "chrome",
+            "travelvivid": "chrome",
+            "bw_graphic": "noirHigh",
+            "bwgraphic": "noirHigh"
+        ]
+
+        if let id = aliases[canonicalToken] ?? aliases[canonicalToken.replacingOccurrences(of: "_", with: "")] {
+            return filter(for: id)
+        }
 
         return all.first {
             $0.id.caseInsensitiveCompare(normalized) == .orderedSame ||
