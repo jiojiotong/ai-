@@ -120,6 +120,7 @@ final class HermesCompositionAdvisor: ObservableObject {
         移动字段只能填：left、right、up、down、closer、farther、hold。它表示“相机/手机应该往哪里动”，不是主体往哪里动。
         变焦字段只能填数字倍率：0.5、1、1.5、2、3、4、8。没有必要变焦就填 1。
         滤镜必须从可选滤镜里选 1 个，必须返回 filterId，不要返回滤镜中文名。
+        禁止返回 JSON 预设名作为滤镜：natural_clean、portrait_soft、food_warm、product_neutral、night_neon、film_matte、cinematic_teal_orange、travel_vivid、bw_graphic 都不是本 App 的 filterId。
         当前取景比例：\(aspectRatioTitle)
         本地端侧检测结果：\(localContext)
         可选滤镜：

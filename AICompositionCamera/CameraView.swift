@@ -104,7 +104,7 @@ struct CameraView: View {
             .padding(16)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: min(UIScreen.main.bounds.height * 0.58, 560))
+        .frame(height: min(UIScreen.main.bounds.height * 0.52, 520))
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -238,10 +238,21 @@ struct CameraView: View {
     }
 
     private var lowerChrome: some View {
-        VStack(spacing: 18) {
-            modeBar
-            compactCoachBar
+        VStack(spacing: 10) {
+            shootingModeBar
+            if settings.selectedCameraMode == .aiComposition {
+                compactCoachBar
+            } else {
+                featurePanel
+            }
             controls
+        }
+    }
+
+    private var shootingModeBar: some View {
+        HStack(spacing: 10) {
+            featureModeStrip
+            aspectRatioButton
         }
     }
 
@@ -249,6 +260,14 @@ struct CameraView: View {
         HStack {
             Spacer()
 
+            aspectRatioButton
+
+            Spacer()
+        }
+        .padding(.horizontal, 34)
+    }
+
+    private var aspectRatioButton: some View {
             Button {
                 cycleAspectRatio()
             } label: {
@@ -262,10 +281,6 @@ struct CameraView: View {
                 .frame(width: 48, height: 44)
             }
             .buttonStyle(PressableButtonStyle())
-
-            Spacer()
-        }
-        .padding(.horizontal, 34)
     }
 
     private var compactCoachBar: some View {
@@ -495,7 +510,6 @@ struct CameraView: View {
             }
             .padding(.horizontal, 2)
         }
-        .padding(.top, 10)
     }
 
     private var featurePanel: some View {
