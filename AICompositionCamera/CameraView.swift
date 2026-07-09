@@ -24,8 +24,7 @@ struct CameraView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            VStack(spacing: 14) {
-                topBar
+            VStack(spacing: 10) {
                 cameraStage
                 lowerChrome
             }
@@ -104,7 +103,7 @@ struct CameraView: View {
             .padding(16)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: min(UIScreen.main.bounds.height * 0.52, 520))
+        .frame(height: min(UIScreen.main.bounds.height * 0.66, 640))
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -238,7 +237,7 @@ struct CameraView: View {
     }
 
     private var lowerChrome: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             shootingModeBar
             if settings.selectedCameraMode == .aiComposition {
                 compactCoachBar
@@ -284,7 +283,7 @@ struct CameraView: View {
     }
 
     private var compactCoachBar: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 Image(systemName: aiCoachIcon)
                     .font(.system(size: 18, weight: .bold))
@@ -299,7 +298,7 @@ struct CameraView: View {
                     Text(aiCoachMessage)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white)
-                        .lineLimit(2)
+                        .lineLimit(1)
                         .minimumScaleFactor(0.82)
                 }
 
@@ -327,52 +326,9 @@ struct CameraView: View {
                 directorChip(title: "动作", value: directorMoveText, systemImage: "location.fill")
                 directorChip(title: "倍率", value: directorZoomText, systemImage: "scope")
             }
-
-            HStack(spacing: 10) {
-                Button {
-                    triggerManualHermes()
-                } label: {
-                    Label(hasHermesResult ? "重新识别" : "识别当前画面", systemImage: "sparkles")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                }
-                .buttonStyle(PressableButtonStyle())
-
-                if let recommendedFilter {
-                    Button {
-                        buttonFeedback("已切换到 Hermes 推荐滤镜")
-                        settings.selectedFilterID = recommendedFilter.id
-                    } label: {
-                        Label(recommendedFilter.title, systemImage: "camera.filters")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.76)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
-                    .buttonStyle(PressableButtonStyle())
-                } else if hasHermesResult {
-                    Button {
-                        clearHermesSession()
-                    } label: {
-                        Label("退出", systemImage: "xmark.circle.fill")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
-                    .buttonStyle(PressableButtonStyle())
-                }
-            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
@@ -394,7 +350,7 @@ struct CameraView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 9)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .background(.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
@@ -499,10 +455,10 @@ struct CameraView: View {
                         settings.selectedCameraMode = mode
                     } label: {
                         Label(mode.title, systemImage: mode.systemImage)
-                            .font(.caption.weight(.bold))
+                            .font(.caption2.weight(.bold))
                             .foregroundStyle(settings.selectedCameraMode == mode ? .black : .white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 9)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
                             .background(modeBackground(mode), in: Capsule())
                     }
                     .buttonStyle(PressableButtonStyle())
@@ -833,7 +789,7 @@ struct CameraView: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 28) {
+        HStack(spacing: 26) {
             Button {
                 if hasHermesResult {
                     clearHermesSession()
@@ -845,11 +801,11 @@ struct CameraView: View {
                     Image(systemName: hasHermesResult ? "xmark.circle.fill" : "sparkles")
                         .font(.system(size: 24, weight: .bold))
                     Text(hasHermesResult ? "退出" : "识别")
-                        .font(.caption.weight(.semibold))
+                        .font(.caption2.weight(.semibold))
                 }
                 .foregroundStyle(.white)
-                .frame(width: 84, height: 70)
-                .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .frame(width: 78, height: 60)
+                .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .opacity(settings.hermesMode.allowsManual ? 1 : 0.45)
             .buttonStyle(PressableButtonStyle())
@@ -860,11 +816,11 @@ struct CameraView: View {
             } label: {
                 Circle()
                     .strokeBorder(shutterAccentColor, lineWidth: 5)
-                    .frame(width: 76, height: 76)
+                    .frame(width: 70, height: 70)
                     .overlay {
                         Circle()
                             .fill(shutterFillColor)
-                            .frame(width: 58, height: 58)
+                            .frame(width: 54, height: 54)
                     }
                     .overlay {
                         if camera.isCapturingPhoto {
@@ -886,11 +842,11 @@ struct CameraView: View {
                     Image(systemName: settings.hermesMode.allowsAutomatic ? "bolt.circle.fill" : "bolt.slash.circle")
                         .font(.system(size: 24, weight: .bold))
                     Text(settings.hermesMode.allowsAutomatic ? "自动 Hermes" : "手动 Hermes")
-                        .font(.caption.weight(.semibold))
+                        .font(.caption2.weight(.semibold))
                 }
                 .foregroundStyle(.white)
-                .frame(width: 84, height: 70)
-                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .frame(width: 78, height: 60)
+                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(PressableButtonStyle())
         }
