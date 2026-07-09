@@ -33,19 +33,29 @@ final class SettingsStore: ObservableObject {
     }
 
     @Published var selectedFilterID: String {
-        didSet { UserDefaults.standard.set(selectedFilterID, forKey: Keys.selectedFilterID) }
-    }
-
-    @Published var selectedCameraMode: CameraFeatureMode {
-        didSet { UserDefaults.standard.set(selectedCameraMode.rawValue, forKey: Keys.selectedCameraMode) }
+        didSet {
+            UserDefaults.standard.set(selectedFilterID, forKey: Keys.selectedFilterID)
+            let category = PhotoFilter.filter(for: selectedFilterID).category
+            if selectedFilterCategory != category {
+                selectedFilterCategory = category
+            }
+        }
     }
 
     @Published var selectedFilterCategory: FilterCategory {
-        didSet { UserDefaults.standard.set(selectedFilterCategory.rawValue, forKey: Keys.selectedFilterCategory) }
+        didSet {
+            UserDefaults.standard.set(selectedFilterCategory.rawValue, forKey: Keys.selectedFilterCategory)
+            applyFirstFilter(in: selectedFilterCategory)
+        }
     }
 
     @Published var selectedPortraitEnhancementID: String {
-        didSet { UserDefaults.standard.set(selectedPortraitEnhancementID, forKey: Keys.selectedPortraitEnhancementID) }
+        didSet {
+            UserDefaults.standard.set(selectedPortraitEnhancementID, forKey: Keys.selectedPortraitEnhancementID)
+            let enhancement = PortraitEnhancement.enhancement(for: selectedPortraitEnhancementID)
+            selectedFilterID = enhancement.filterID
+            selectedFilterCategory = PhotoFilter.filter(for: enhancement.filterID).category
+        }
     }
 
     @Published var selectedAspectRatio: ShootingAspectRatio {
@@ -64,7 +74,6 @@ final class SettingsStore: ObservableObject {
         let storedBaseURL = defaults.string(forKey: Keys.apiBaseURL) ?? defaults.string(forKey: LegacyKeys.apiBaseURL)
         apiBaseURL = storedBaseURL == nil || storedBaseURL == "https://api.openai.com/v1" ? Self.hermesCameraBaseURL : storedBaseURL ?? Self.hermesCameraBaseURL
         selectedFilterID = defaults.string(forKey: Keys.selectedFilterID) ?? PhotoFilter.fallback.id
-        selectedCameraMode = CameraFeatureMode(rawValue: defaults.string(forKey: Keys.selectedCameraMode) ?? "aiComposition") ?? .aiComposition
         selectedFilterCategory = FilterCategory(rawValue: defaults.string(forKey: Keys.selectedFilterCategory) ?? "portrait") ?? .portrait
         selectedPortraitEnhancementID = defaults.string(forKey: Keys.selectedPortraitEnhancementID) ?? PortraitEnhancement.natural.id
         selectedAspectRatio = ShootingAspectRatio(rawValue: defaults.string(forKey: Keys.selectedAspectRatio) ?? "full") ?? .full
@@ -95,65 +104,11 @@ final class SettingsStore: ObservableObject {
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         return normalized == Self.hermesCameraBaseURL || normalized.contains("api.anyther.top/hermes-ai-camera")
     }
-}
 
-enum CameraFeatureMode: String, CaseIterable, Identifiable {
-    case photo
-    case aiComposition
-    case portrait
-    case beauty
-    case filters
-    case background
-    case pose
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .photo: return "拍照"
-        case .aiComposition: return "AI 构图"
-        case .portrait: return "人像"
-        case .beauty: return "美颜"
-        case .filters: return "滤镜"
-        case .background: return "背景"
-        case .pose: return "姿态"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .photo: return "camera.fill"
-        case .aiComposition: return "sparkles.rectangle.stack"
-        case .portrait: return "person.crop.rectangle"
-        case .beauty: return "face.smiling"
-        case .filters: return "camera.filters"
-        case .background: return "person.crop.square"
-        case .pose: return "figure.stand"
-        }
-    }
-
-    var panelTitle: String {
-        switch self {
-        case .photo: return "胶片拍摄"
-        case .aiComposition: return "AI 构图工作台"
-        case .portrait: return "人像风格"
-        case .beauty: return "轻美颜"
-        case .filters: return "滤镜库"
-        case .background: return "背景突出"
-        case .pose: return "姿态构图"
-        }
-    }
-
-    var summary: String {
-        switch self {
-        case .photo: return "像胶片相机一样快速选预设、调比例、按下快门。"
-        case .aiComposition: return "把本地构图检测、Hermes 建议和推荐滤镜集中在拍摄前完成。"
-        case .portrait: return "优先适配人脸、人像和半身照片的色彩氛围。"
-        case .beauty: return "只做亮度、肤色和柔和度增强，不做变形美颜。"
-        case .filters: return "按场景分类选择滤镜，避免在长列表里反复滑动。"
-        case .background: return "用人像滤镜和构图提示突出主体，真实抠图待接入分割模型。"
-        case .pose: return "聚焦头顶留白、身体裁切和主体位置提示。"
-        }
+    private func applyFirstFilter(in category: FilterCategory) {
+        guard selectedFilterCategory == category else { return }
+        guard PhotoFilter.filter(for: selectedFilterID).category != category else { return }
+        selectedFilterID = PhotoFilter.filters(in: category).first?.id ?? PhotoFilter.fallback.id
     }
 }
 
@@ -255,7 +210,6 @@ private enum Keys {
     static let model = "hermesModel"
     static let apiBaseURL = "hermesAPIBaseURL"
     static let selectedFilterID = "selectedFilterID"
-    static let selectedCameraMode = "selectedCameraMode"
     static let selectedFilterCategory = "selectedFilterCategory"
     static let selectedPortraitEnhancementID = "selectedPortraitEnhancementID"
     static let selectedAspectRatio = "selectedAspectRatio"

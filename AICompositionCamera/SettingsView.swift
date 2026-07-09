@@ -68,12 +68,6 @@ struct SettingsView: View {
                 }
 
                 Section("拍摄功能") {
-                    Picker("当前模式", selection: $settings.selectedCameraMode) {
-                        ForEach(CameraFeatureMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-
                     Picker("当前滤镜分类", selection: $settings.selectedFilterCategory) {
                         ForEach(FilterCategory.displayOrder, id: \.rawValue) { category in
                             Text(category.title).tag(category)

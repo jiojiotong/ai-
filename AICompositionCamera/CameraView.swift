@@ -24,18 +24,14 @@ struct CameraView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            VStack(spacing: 10) {
-                cameraStage
-                lowerChrome
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 34)
-            .padding(.bottom, 10)
+            cameraStage
+
+            cameraChrome
 
             VStack {
                 Spacer()
                 feedbackToast
-                    .padding(.bottom, 170)
+                    .padding(.bottom, 154)
             }
             .padding(.horizontal, 18)
         }
@@ -65,19 +61,6 @@ struct CameraView: View {
         }
     }
 
-    private var topBar: some View {
-        HStack {
-            statusPill
-            Spacer()
-            Text("Hermes")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.white.opacity(0.72))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(.white.opacity(0.10), in: Capsule())
-        }
-    }
-
     private var cameraStage: some View {
         ZStack {
             cameraSurface
@@ -94,22 +77,31 @@ struct CameraView: View {
 
             focusIndicator
 
+            cameraReadinessOverlay
+        }
+        .ignoresSafeArea()
+    }
+
+    private var cameraChrome: some View {
+        GeometryReader { geometry in
             VStack(spacing: 0) {
                 stageTopOverlay
+
                 Spacer()
+
                 zoomStrip
-                    .padding(.bottom, 18)
+                    .padding(.bottom, 12)
+
+                compactCoachBar
+                    .padding(.bottom, 12)
+
+                controls
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.top, max(geometry.safeAreaInsets.top, 14))
+            .padding(.bottom, max(geometry.safeAreaInsets.bottom, 12) + 6)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: min(UIScreen.main.bounds.height * 0.64, 620))
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(.white.opacity(0.12), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.45), radius: 18, x: 0, y: 10)
+        .ignoresSafeArea(edges: .bottom)
     }
 
     @ViewBuilder
@@ -163,32 +155,17 @@ struct CameraView: View {
 
             Spacer()
 
-            HStack(spacing: 8) {
-                Button {
-                    clearHermesSession(restoreCamera: false, showFeedback: false)
-                    camera.switchCamera()
-                    buttonFeedback(camera.cameraPosition == .back ? "切换前置相机" : "切换后置相机")
-                } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath.camera")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 42, height: 42)
-                        .background(.black.opacity(0.34), in: Circle())
-                }
-                .buttonStyle(PressableButtonStyle())
-
-                Button {
-                    buttonFeedback("打开设置")
-                    showingSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 42, height: 42)
-                        .background(.black.opacity(0.34), in: Circle())
-                }
-                .buttonStyle(PressableButtonStyle())
+            Button {
+                buttonFeedback("打开设置")
+                showingSettings = true
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background(.black.opacity(0.34), in: Circle())
             }
+            .buttonStyle(PressableButtonStyle())
         }
     }
 
@@ -236,83 +213,94 @@ struct CameraView: View {
         .background(.black.opacity(0.30), in: Capsule())
     }
 
-    private var lowerChrome: some View {
-        VStack(spacing: 8) {
-            compactCoachBar
-            controls
-        }
-    }
-
     private var compactCoachBar: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                Image(systemName: aiCoachIcon)
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.black)
-                    .frame(width: 34, height: 34)
-                    .background(.white.opacity(0.94), in: Circle())
+        HStack(spacing: 12) {
+            Image(systemName: aiCoachIcon)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.black)
+                .frame(width: 34, height: 34)
+                .background(.white.opacity(0.94), in: Circle())
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(aiCoachTitle)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white.opacity(0.58))
-                    Text(aiCoachMessage)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
-                }
-
-                Spacer(minLength: 8)
-
-                if hermesAdvisor.isAnalyzing {
-                    ProgressView()
-                        .tint(.white)
-                } else if hasHermesResult {
-                    Button {
-                        clearHermesSession()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.92))
-                            .frame(width: 34, height: 34)
-                    }
-                    .buttonStyle(PressableButtonStyle(scale: 0.9))
-                    .accessibilityLabel("退出 Hermes 识别")
-                }
-            }
-
-            HStack(spacing: 8) {
-                directorChip(title: "主体", value: directorSubjectText, systemImage: "viewfinder")
-                directorChip(title: "动作", value: directorMoveText, systemImage: "location.fill")
-                directorChip(title: "倍率", value: directorZoomText, systemImage: "scope")
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-
-    private func directorChip(title: String, value: String, systemImage: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white.opacity(0.66))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.48))
-                Text(value)
-                    .font(.caption.weight(.heavy))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(aiCoachTitle)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.58))
+                Text(aiCoachMessage)
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
             }
+
+            Spacer(minLength: 8)
+
+            if hermesAdvisor.isAnalyzing {
+                ProgressView()
+                    .tint(.white)
+            } else if hasHermesResult {
+                Button {
+                    clearHermesSession()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(PressableButtonStyle(scale: 0.9))
+                .accessibilityLabel("退出 Hermes 识别")
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 6)
-        .background(.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.black.opacity(0.50), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var cameraReadinessOverlay: some View {
+        if camera.authorizationStatus != .authorized || camera.latestImage == nil {
+            VStack(spacing: 14) {
+                Image(systemName: camera.authorizationStatus == .authorized ? "camera.viewfinder" : "camera.fill.badge.ellipsis")
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(.white)
+
+                VStack(spacing: 4) {
+                    Text(camera.authorizationStatus == .authorized ? "相机准备中" : "需要相机权限")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.white)
+                    Text(camera.statusText)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .multilineTextAlignment(.center)
+                }
+
+                if camera.authorizationStatus != .authorized {
+                    Button {
+                        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                        UIApplication.shared.open(url)
+                    } label: {
+                        Text("打开系统设置")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 9)
+                            .background(.white, in: Capsule())
+                    }
+                    .buttonStyle(PressableButtonStyle())
+                }
+            }
+            .padding(.horizontal, 22)
+            .padding(.vertical, 20)
+            .background(.black.opacity(0.54), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(.white.opacity(0.12), lineWidth: 1)
+            }
+            .padding(.horizontal, 32)
+        }
     }
 
     @ViewBuilder
@@ -325,53 +313,6 @@ struct CameraView: View {
                 .padding(.vertical, 10)
                 .background(.black.opacity(0.58), in: Capsule())
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
-        }
-    }
-
-    private var statusPill: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(camera.authorizationStatus == .authorized ? Color.green : Color.orange)
-                .frame(width: 8, height: 8)
-            Text(camera.statusText)
-                .font(.caption.weight(.semibold))
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.black.opacity(0.35), in: Capsule())
-    }
-
-    @ViewBuilder
-    private var aspectRatioGuide: some View {
-        if let ratio = settings.selectedAspectRatio.numericRatio {
-            GeometryReader { geometry in
-                let availableWidth = max(80, geometry.size.width - 32)
-                let availableHeight = max(120, geometry.size.height - 220)
-                let width = min(availableWidth, availableHeight * ratio)
-                let height = width / max(ratio, 0.01)
-
-                ZStack {
-                    Rectangle()
-                        .fill(.black.opacity(0.18))
-                        .mask {
-                            Rectangle()
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .frame(width: width, height: height)
-                                        .blendMode(.destinationOut)
-                                }
-                        }
-                        .compositingGroup()
-
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(.white.opacity(0.52), lineWidth: 1.4)
-                        .frame(width: width, height: height)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .allowsHitTesting(false)
-            .ignoresSafeArea()
         }
     }
 
@@ -408,7 +349,7 @@ struct CameraView: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 26) {
+        HStack(spacing: 34) {
             Button {
                 if hasHermesResult {
                     clearHermesSession()
@@ -416,18 +357,19 @@ struct CameraView: View {
                     triggerManualHermes()
                 }
             } label: {
-                VStack(spacing: 6) {
-                    Image(systemName: hasHermesResult ? "xmark.circle.fill" : "sparkles")
-                        .font(.system(size: 24, weight: .bold))
-                    Text(hasHermesResult ? "退出" : "识别")
-                        .font(.caption2.weight(.semibold))
-                }
-                .foregroundStyle(.white)
-                .frame(width: 78, height: 60)
-                .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Image(systemName: hasHermesResult ? "xmark.circle.fill" : "sparkles")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 62, height: 62)
+                    .background(.black.opacity(0.44), in: Circle())
+                    .overlay {
+                        Circle()
+                            .stroke(.white.opacity(0.18), lineWidth: 1)
+                    }
             }
             .opacity(settings.hermesMode.allowsManual ? 1 : 0.45)
             .buttonStyle(PressableButtonStyle())
+            .accessibilityLabel(hasHermesResult ? "退出识别" : "Hermes 识别")
 
             Button {
                 buttonFeedback(camera.isCapturingPhoto ? "正在保存上一张照片" : (isCaptureReady ? "构图就绪，正在拍照" : "正在拍照"))
@@ -455,21 +397,23 @@ struct CameraView: View {
             .buttonStyle(PressableButtonStyle(scale: 0.92))
 
             Button {
-                toggleAIMode()
+                clearHermesSession(restoreCamera: false, showFeedback: false)
+                camera.switchCamera()
+                buttonFeedback(camera.cameraPosition == .back ? "切换前置相机" : "切换后置相机")
             } label: {
-                VStack(spacing: 6) {
-                    Image(systemName: settings.hermesMode.allowsAutomatic ? "bolt.circle.fill" : "bolt.slash.circle")
-                        .font(.system(size: 24, weight: .bold))
-                    Text(settings.hermesMode.allowsAutomatic ? "自动 Hermes" : "手动 Hermes")
-                        .font(.caption2.weight(.semibold))
-                }
-                .foregroundStyle(.white)
-                .frame(width: 78, height: 60)
-                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Image(systemName: "arrow.triangle.2.circlepath.camera")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 62, height: 62)
+                    .background(.black.opacity(0.44), in: Circle())
+                    .overlay {
+                        Circle()
+                            .stroke(.white.opacity(0.18), lineWidth: 1)
+                    }
             }
             .buttonStyle(PressableButtonStyle())
+            .accessibilityLabel("切换前后相机")
         }
-        .padding(.top, 2)
     }
 
     private func triggerManualHermes() {
@@ -499,16 +443,6 @@ struct CameraView: View {
                 localResult: camera.compositionResult,
                 settings: settings
             )
-        }
-    }
-
-    private func toggleAIMode() {
-        if settings.hermesMode.allowsAutomatic {
-            settings.hermesMode = .manual
-            buttonFeedback("已切换为手动 Hermes")
-        } else {
-            settings.hermesMode = .manualAndAutomatic
-            buttonFeedback("已开启自动 Hermes")
         }
     }
 
@@ -575,44 +509,6 @@ struct CameraView: View {
         let cutoff = Date().addingTimeInterval(-60)
         automaticRequestDates = automaticRequestDates.filter { $0 >= cutoff }
         return automaticRequestDates.count < 6
-    }
-
-    private var recommendedFilter: PhotoFilter? {
-        guard let id = hermesAdvisor.recommendedFilterID else { return nil }
-        return PhotoFilter.all.first { $0.id == id }
-    }
-
-    private var directorSubjectText: String {
-        if hermesAdvisor.isAnalyzing { return "识别中" }
-        if let subject = hermesAdvisor.recognizedSubject, !subject.isEmpty { return subject }
-        if camera.compositionResult?.primarySubject != nil { return subjectStateText }
-        return "待识别"
-    }
-
-    private var directorMoveText: String {
-        if hermesAdvisor.isAnalyzing { return "分析中" }
-        if hermesAdvisor.errorMessage != nil { return "本地指导" }
-        if !hasHermesResult, settings.hermesMode.allowsAutomatic {
-            return automaticReadinessText
-        }
-        guard let guidance = activeCaptureGuidance else { return "等待主体" }
-        if let direction = guidance.direction {
-            return guidance.message.isEmpty ? direction.title : guidance.message
-        }
-        if guidance.zoomFactor != nil {
-            return guidance.message.isEmpty ? "调整倍率" : guidance.message
-        }
-        return "继续取景"
-    }
-
-    private var directorZoomText: String {
-        if let zoom = normalizedGuidance(hermesAdvisor.captureGuidance)?.zoomFactor {
-            return "\(zoomLabel(zoom))x"
-        }
-        if let zoom = normalizedGuidance(camera.compositionResult?.liveGuidance)?.zoomFactor {
-            return "\(zoomLabel(zoom))x"
-        }
-        return "\(zoomLabel(camera.zoomFactor))x"
     }
 
     private var automaticReadinessText: String {
@@ -711,15 +607,6 @@ struct CameraView: View {
             return "本地预判：\(guidance.message)。点识别让 Hermes 接管。"
         }
         return "点识别，让 Hermes 判断主体、位置和倍率。"
-    }
-
-    private var subjectStateText: String {
-        switch camera.compositionResult?.primarySubject?.kind {
-        case .face?: return "人脸"
-        case .human?: return "人物"
-        case .object?: return "主体"
-        case nil: return "等待"
-        }
     }
 
     private var isCaptureReady: Bool {
@@ -844,16 +731,6 @@ struct CameraView: View {
             return String(Int(rounded))
         }
         return String(format: "%.1f", Double(rounded))
-    }
-
-    private func cycleAspectRatio() {
-        let ratios = ShootingAspectRatio.allCases
-        guard let index = ratios.firstIndex(of: settings.selectedAspectRatio) else {
-            settings.selectedAspectRatio = .full
-            return
-        }
-        settings.selectedAspectRatio = ratios[(index + 1) % ratios.count]
-        buttonFeedback("取景比例 \(settings.selectedAspectRatio.title)")
     }
 
     private func handleFocusTap(devicePoint: CGPoint, layerPoint: CGPoint) {
