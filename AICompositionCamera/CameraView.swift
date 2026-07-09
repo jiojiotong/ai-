@@ -29,8 +29,8 @@ struct CameraView: View {
                 lowerChrome
             }
             .padding(.horizontal, 18)
-            .padding(.top, 6)
-            .padding(.bottom, 14)
+            .padding(.top, 34)
+            .padding(.bottom, 10)
 
             VStack {
                 Spacer()
@@ -103,7 +103,7 @@ struct CameraView: View {
             .padding(16)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: min(UIScreen.main.bounds.height * 0.66, 640))
+        .frame(height: min(UIScreen.main.bounds.height * 0.64, 620))
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -242,7 +242,7 @@ struct CameraView: View {
             if settings.selectedCameraMode == .aiComposition {
                 compactCoachBar
             } else {
-                featurePanel
+                compactFeatureControls
             }
             controls
         }
@@ -504,6 +504,35 @@ struct CameraView: View {
         .foregroundStyle(.white)
         .padding(14)
         .background(.black.opacity(0.42), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var compactFeatureControls: some View {
+        switch settings.selectedCameraMode {
+        case .photo:
+            filterStrip(filters: PhotoFilter.spotlight)
+        case .portrait, .beauty:
+            portraitEnhancementStrip
+        case .filters:
+            VStack(alignment: .leading, spacing: 8) {
+                categoryStrip
+                filterStrip(filters: PhotoFilter.filters(in: settings.selectedFilterCategory))
+            }
+        case .background:
+            HStack(spacing: 10) {
+                quickFilterButton(id: "softPortrait", title: "主体柔和", subtitle: "人像")
+                quickFilterButton(id: "cream", title: "奶油背景", subtitle: "低饱和")
+                quickFilterButton(id: "moodyDark", title: "暗调突出", subtitle: "质感")
+            }
+        case .pose:
+            HStack(spacing: 8) {
+                coachMetric(title: "主体", value: subjectStateText)
+                coachMetric(title: "稳定", value: camera.isFrameStable ? "可拍" : "移动中")
+                coachMetric(title: "提示", value: camera.compositionResult?.topSuggestion ?? "等待")
+            }
+        case .aiComposition:
+            compactCoachBar
+        }
     }
 
     private var photoQuickPanel: some View {
@@ -850,7 +879,7 @@ struct CameraView: View {
             }
             .buttonStyle(PressableButtonStyle())
         }
-        .padding(.top, 10)
+        .padding(.top, 2)
     }
 
     private func triggerManualHermes() {

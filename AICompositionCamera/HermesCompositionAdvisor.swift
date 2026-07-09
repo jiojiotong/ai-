@@ -104,7 +104,9 @@ final class HermesCompositionAdvisor: ObservableObject {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 18
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("AICompositionCamera/1.0 HermesRuntime", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 30
 
         let imageURL = "data:image/jpeg;base64,\(jpegData.base64EncodedString())"
         let prompt = """
